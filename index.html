@@ -1110,7 +1110,7 @@
         for (var c = 0; c < COLS; c++) {
           var i = r * COLS + c, cell = panel[r][c] || ' ';
           tgt[i] = cell;
-          if (cur[i] === cell) { anim[i] = null; continue; }
+          if (cur[i] === cell) { if (anim[i]) setTile(i, cell, false); anim[i] = null; continue; }
           if (STILL) { setTile(i, cell, false); cur[i] = cell; continue; }
           anim[i] = { at: now + c * 26 + r * 14 + Math.random() * 110, left: 2 + Math.floor(Math.random() * 5) };
         }
