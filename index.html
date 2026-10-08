@@ -1,0 +1,1679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SoHo Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+  /* Split-flap board for the TV, plus a PIN-locked admin page at #admin.
+     Board: near-black bezel, charcoal flaps, warm white characters, seven color chips. */
+  :root {
+    --bezel: #070707;
+    --frame: #0B0B0B;
+    --flap: #1B1B1B;
+    --flap-hi: #242424;
+    --flap-lo: #141414;
+    --char: #F1F0EC;
+    --seam: rgba(0, 0, 0, 0.78);
+    --R: #E0362C;
+    --O: #F47B20;
+    --Y: #F6C21C;
+    --G: #22A04B;
+    --B: #2369D6;
+    --V: #7A3EA1;
+    --W: #F1F0EC;
+    --K: #2C2C2C;
+
+    --a-bg: #0D0E10;
+    --a-card: #16181C;
+    --a-field: #1E2126;
+    --a-line: #2A2E35;
+    --a-ink: #ECEDEF;
+    --a-muted: #9A9FA8;
+    --a-accent: #F6C21C;
+    --a-on-accent: #141005;
+    --a-danger: #FF6B5E;
+    --a-ok: #3CCB6E;
+
+    --flap-font: "Barlow Semi Condensed", "Arial Narrow", Arial, sans-serif;
+    --ui-font: "Barlow", "Segoe UI", Arial, sans-serif;
+  }
+  html, body { margin: 0; height: 100%; background: var(--bezel); color: var(--a-ink); font-family: var(--ui-font); }
+  [hidden] { display: none !important; }
+
+  /* ---------- TV board ---------- */
+  #tv {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bezel); overflow: hidden; cursor: none;
+  }
+  #board {
+    display: grid;
+    background: var(--frame);
+    box-shadow: inset 0 0 0 1px #1C1C1C, 0 0 80px rgba(0, 0, 0, 0.9);
+  }
+  .t {
+    position: relative; overflow: hidden;
+    background: linear-gradient(180deg, var(--flap-hi) 0%, var(--flap) 49%, var(--flap-lo) 51%, var(--flap) 100%);
+    color: var(--char);
+    font-family: var(--flap-font); font-weight: 600;
+    text-align: center;
+  }
+  .t::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%;
+    height: var(--seam-h, 2px); margin-top: calc(var(--seam-h, 2px) / -2);
+    background: var(--seam);
+  }
+  .t.f::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 50%;
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .t.cR, .t.cO, .t.cY, .t.cG, .t.cB, .t.cV, .t.cW, .t.cK {
+    background-image: linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 49%, rgba(0,0,0,0.16) 51%, rgba(0,0,0,0.04) 100%);
+  }
+  .t.cR { background-color: var(--R); }
+  .t.cO { background-color: var(--O); }
+  .t.cY { background-color: var(--Y); }
+  .t.cG { background-color: var(--G); }
+  .t.cB { background-color: var(--B); }
+  .t.cV { background-color: var(--V); }
+  .t.cW { background-color: var(--W); }
+  .t.cK { background-color: var(--K); }
+  #dot {
+    position: fixed; right: 10px; bottom: 8px; width: 7px; height: 7px; border-radius: 50%;
+    background: #3A3A3A;
+  }
+  #dot.on { background: #1E6E39; }
+
+  /* ---------- Admin ---------- */
+  #admin {
+    min-height: 100%; background: var(--a-bg); color: var(--a-ink);
+    padding: 24px 16px 80px; box-sizing: border-box;
+  }
+  #admin * { box-sizing: border-box; }
+  .a-wrap { max-width: 860px; margin: 0 auto; display: grid; grid-gap: 16px; }
+  .a-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; grid-gap: 12px; }
+  .a-eyebrow { margin: 0; font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--a-muted); font-weight: 600; }
+  .a-head h1 { margin: 2px 0 0; font-family: var(--flap-font); font-weight: 600; font-size: 34px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .a-card { background: var(--a-card); border: 1px solid var(--a-line); border-radius: 14px; padding: 18px; display: grid; grid-gap: 14px; min-width: 0; }
+  .a-card h2 { margin: 0; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--a-muted); font-weight: 600; }
+  .a-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); grid-gap: 14px; }
+  .a-hint { margin: 0; font-size: 14px; color: var(--a-muted); line-height: 1.45; }
+  .a-err { margin: 0; font-size: 14px; color: var(--a-danger); }
+  .a-err:empty { display: none; }
+  .a-field { display: grid; grid-gap: 6px; min-width: 0; }
+  .a-field label, .a-label { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--a-muted); font-weight: 600; }
+  .a-field input, .a-field select, .a-field textarea {
+    width: 100%; font: inherit; font-size: 16px; color: var(--a-ink);
+    background: var(--a-field); border: 1px solid var(--a-line); border-radius: 10px; padding: 10px 12px; min-height: 44px;
+  }
+  .a-field textarea { resize: vertical; min-height: 80px; line-height: 1.4; }
+  .a-field input:focus, .a-field select:focus, .a-field textarea:focus { outline: none; border-color: var(--a-accent); }
+  .a-field .a-row select { flex: 1; min-width: 0; }
+  .a-toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); grid-gap: 8px; }
+  .a-toggle {
+    display: flex; align-items: center; grid-gap: 10px; padding: 10px 12px; cursor: pointer;
+    background: var(--a-field); border: 1px solid var(--a-line); border-radius: 10px; font-size: 15px;
+  }
+  .a-toggle input { width: 20px; height: 20px; margin: 0; accent-color: var(--a-accent); flex: none; }
+  .a-toggle.off { color: var(--a-muted); }
+  .a-count { font-size: 12px; color: var(--a-muted); justify-self: end; }
+  .a-row { display: flex; flex-wrap: wrap; grid-gap: 10px; align-items: center; }
+  .a-btn {
+    display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 0 18px;
+    border-radius: 10px; border: 1px solid var(--a-line); background: var(--a-field); color: var(--a-ink);
+    font: inherit; font-weight: 600; font-size: 15px; cursor: pointer; text-decoration: none;
+  }
+  .a-btn:hover { border-color: var(--a-muted); }
+  .a-btn.primary { background: var(--a-accent); border-color: var(--a-accent); color: var(--a-on-accent); }
+  .a-btn.small { min-height: 34px; padding: 0 12px; font-size: 14px; }
+  .a-btn.icon { width: 40px; padding: 0; font-size: 20px; }
+  .a-btn.danger { color: var(--a-danger); }
+  .a-btn[disabled] { opacity: 0.5; cursor: progress; }
+  :focus-visible { outline: 2px solid var(--a-accent); outline-offset: 2px; }
+  .a-preview { position: relative; width: 100%; padding-top: 56.25%; border-radius: 10px; overflow: hidden; background: #000; }
+  .a-preview iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0; }
+  .a-status { display: inline-flex; align-items: center; grid-gap: 8px; font-size: 14px; color: var(--a-muted); }
+  .a-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--a-muted); }
+  .a-status.on::before { background: var(--a-ok); }
+  .a-list { display: grid; grid-gap: 8px; }
+  .a-item {
+    display: flex; align-items: center; grid-gap: 12px; padding: 10px 12px;
+    background: var(--a-field); border: 1px solid var(--a-line); border-radius: 10px; min-width: 0;
+  }
+  .a-item .grow { flex: 1; min-width: 0; }
+  .a-item .name { font-weight: 600; }
+  .a-item .sub { font-size: 14px; color: var(--a-muted); overflow-wrap: anywhere; }
+  .a-num { font-family: var(--flap-font); font-size: 22px; font-weight: 600; min-width: 32px; text-align: center; font-variant-numeric: tabular-nums; }
+  .a-stars { color: var(--a-accent); letter-spacing: 1px; font-size: 14px; }
+  .a-table-wrap { overflow-x: auto; }
+  .a-table { width: 100%; border-collapse: collapse; font-size: 15px; font-variant-numeric: tabular-nums; }
+  .a-table th, .a-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--a-line); white-space: nowrap; }
+  .a-table th { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--a-muted); font-weight: 600; }
+  .a-table td.r, .a-table th.r { text-align: right; }
+  .a-empty { margin: 0; font-size: 15px; color: var(--a-muted); }
+  .a-toast {
+    position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10;
+    background: var(--a-ink); color: var(--a-bg); padding: 12px 18px; border-radius: 10px; font-weight: 600;
+    max-width: calc(100% - 32px);
+  }
+  .a-toast.bad { background: var(--a-danger); color: #1A0503; }
+</style>
+</head>
+<body>
+
+<div id="tv" hidden>
+  <div id="board" role="img" aria-label="SoHo team board"></div>
+  <div id="dot"></div>
+</div>
+
+<div id="admin" hidden>
+  <div class="a-wrap">
+    <header class="a-head">
+      <div>
+        <p class="a-eyebrow">TTA SoHo</p>
+        <h1>Board Admin</h1>
+      </div>
+      <a class="a-btn" id="openBoard" href="#">Open TV board</a>
+    </header>
+
+    <section class="a-card" id="gate">
+      <h2>Enter PIN</h2>
+      <form id="gateForm" class="a-row">
+        <div class="a-field" style="flex:1;min-width:180px">
+          <label for="pinInput">Manager PIN</label>
+          <input id="pinInput" type="password" autocomplete="off">
+        </div>
+        <button class="a-btn primary" type="submit" style="align-self:flex-end">Unlock</button>
+      </form>
+      <p class="a-err" id="gateMsg"></p>
+    </section>
+
+    <div id="adminMain" class="a-wrap" hidden>
+      <section class="a-card">
+        <div class="a-row" style="justify-content:space-between">
+          <h2>Live preview</h2>
+          <span class="a-status" id="connState">Connecting…</span>
+        </div>
+        <div class="a-preview"><iframe id="preview" title="Board preview"></iframe></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Pages on the board</h2>
+        <p class="a-hint">Turn pages on or off. Changes show up on the TV right away. Pages with nothing to show, like an empty shout-out list, skip themselves.</p>
+        <div class="a-toggles" id="panelToggles"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Upload Dutchie report</h2>
+        <p class="a-hint">Use the same sales report as the ATV contest. It needs Budtender Name, Order ID, Total Inventory Sold and Net Sales columns. Upload yesterday's report each morning. Re-uploading a day replaces it.</p>
+        <div class="a-row">
+          <label class="a-btn primary" for="reportFile">Choose report</label>
+          <input type="file" id="reportFile" accept=".xlsx,.xls,.csv" multiple hidden>
+        </div>
+        <p class="a-err" id="uploadMsg"></p>
+        <div id="parsed"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Goals</h2>
+        <form id="goalForm" class="a-grid2">
+          <div class="a-field">
+            <label for="dailyGoal">Daily sales goal ($)</label>
+            <input id="dailyGoal" type="number" min="0" step="100" inputmode="numeric" placeholder="20000">
+          </div>
+          <div class="a-field">
+            <label for="monthlyGoal">Monthly sales goal ($)</label>
+            <input id="monthlyGoal" type="number" min="0" step="1000" inputmode="numeric" placeholder="600000">
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Save goals</button></div>
+        </form>
+      </section>
+
+      <section class="a-card">
+        <h2 id="starTitle">Star Board</h2>
+        <p class="a-hint">Add a star every time a Google review names someone. Names come from uploaded reports, or add one below.</p>
+        <div class="a-list" id="starList"></div>
+        <form id="addNameForm" class="a-row">
+          <div class="a-field" style="flex:1;min-width:180px">
+            <label for="newName">Add a name</label>
+            <input id="newName" type="text" maxlength="24" placeholder="Kathy P">
+          </div>
+          <button class="a-btn" type="submit" style="align-self:flex-end">Add</button>
+        </form>
+      </section>
+
+      <section class="a-card">
+        <h2>Google review quotes</h2>
+        <form id="quoteForm" class="a-grid2">
+          <div class="a-field">
+            <label for="quoteName">Review mentions</label>
+            <input id="quoteName" type="text" list="nameList" maxlength="24" placeholder="Kathy P" required>
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="quoteText">What the review said</label>
+            <textarea id="quoteText" maxlength="220" required placeholder="Kathy knew exactly what I was looking for and made the whole visit easy."></textarea>
+            <span class="a-count" id="quoteCount">0 / 220</span>
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Add quote</button></div>
+        </form>
+        <div class="a-list" id="quoteList"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Shout-outs</h2>
+        <form id="shoutForm" class="a-grid2">
+          <div class="a-field">
+            <label for="shoutTo">Shout-out to</label>
+            <input id="shoutTo" type="text" list="nameList" maxlength="24" required placeholder="Nick S">
+          </div>
+          <div class="a-field">
+            <label for="shoutFrom">From (optional)</label>
+            <input id="shoutFrom" type="text" maxlength="24" placeholder="Mark">
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="shoutText">Message</label>
+            <textarea id="shoutText" maxlength="160" required placeholder="Stayed late to help close and walked three first-timers through edibles."></textarea>
+            <span class="a-count" id="shoutCount">0 / 160</span>
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Post shout-out</button></div>
+        </form>
+        <div class="a-list" id="shoutList"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Board message</h2>
+        <p class="a-hint">A free message that gets its own panel, like a team note or reminder. Leave it empty to skip the panel.</p>
+        <div class="a-field">
+          <label for="msgText">Message</label>
+          <textarea id="msgText" maxlength="200" placeholder="Inventory count Sunday 8 AM. Coffee is on me."></textarea>
+          <span class="a-count" id="msgCount">0 / 200</span>
+        </div>
+        <div class="a-row">
+          <button class="a-btn primary" type="button" id="msgSave">Save message</button>
+          <button class="a-btn" type="button" id="msgClear">Clear</button>
+        </div>
+      </section>
+
+      <section class="a-card">
+        <h2>Days without a misdispense</h2>
+        <p class="a-hint" id="misInfo">Checking the misdispense log…</p>
+        <p class="a-hint">The counter reads your misdispense log on its own and resets when someone logs an incident. Only set a date here if an incident didn't get logged.</p>
+        <div class="a-row">
+          <div class="a-field" style="min-width:200px">
+            <label for="misReset">Last misdispense (manual)</label>
+            <input type="date" id="misReset">
+          </div>
+          <button class="a-btn" type="button" id="misResetSave" style="align-self:flex-end">Save date</button>
+          <button class="a-btn" type="button" id="misResetClear" style="align-self:flex-end">Clear</button>
+        </div>
+      </section>
+
+      <section class="a-card">
+        <h2>Product spotlight</h2>
+        <p class="a-hint">Add a product to feature. If there's more than one, the board takes turns showing them.</p>
+        <form id="spotForm" class="a-grid2">
+          <div class="a-field">
+            <label for="spotProduct">Product</label>
+            <input id="spotProduct" type="text" maxlength="40" required placeholder="Wyld Elderberry 2:1 Gummies">
+          </div>
+          <div class="a-field">
+            <label for="spotBrand">Brand</label>
+            <input id="spotBrand" type="text" maxlength="20" placeholder="Wyld">
+          </div>
+          <div class="a-field">
+            <label for="spotPrice">Price</label>
+            <input id="spotPrice" type="text" maxlength="12" placeholder="28">
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="spotPoints">Talking points (one per line, up to 3)</label>
+            <textarea id="spotPoints" maxlength="150" placeholder="Our #1 Wyld flavor last month&#10;2:1 THC to CBN&#10;Real fruit, vegan"></textarea>
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Add spotlight</button></div>
+        </form>
+        <div class="a-list" id="spotList"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Birthdays and anniversaries</h2>
+        <p class="a-hint">Birthdays save the month and day only. Check that people are OK with it before adding them. Start dates turn into work anniversaries.</p>
+        <form id="teamForm" class="a-grid2">
+          <div class="a-field">
+            <label for="teamName">Name</label>
+            <input id="teamName" type="text" list="nameList" maxlength="24" required placeholder="Skye M">
+          </div>
+          <div class="a-field">
+            <span class="a-label">Birthday</span>
+            <div class="a-row" style="flex-wrap:nowrap">
+              <select id="bdayMonth" aria-label="Birthday month"></select>
+              <select id="bdayDay" aria-label="Birthday day"></select>
+            </div>
+          </div>
+          <div class="a-field">
+            <label for="teamStart">Start date</label>
+            <input id="teamStart" type="date">
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Save</button></div>
+        </form>
+        <div class="a-list" id="teamList"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Trivia</h2>
+        <label class="a-row" for="builtinTrivia" style="font-size:15px">
+          <input type="checkbox" id="builtinTrivia" style="width:20px;height:20px">
+          Include the 20 built-in cannabis trivia questions
+        </label>
+        <form id="triviaForm" class="a-grid2">
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="triviaQ">Question</label>
+            <textarea id="triviaQ" maxlength="140" required placeholder="Which brand on our shelf makes the Elderberry gummies?"></textarea>
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="triviaA">Answer</label>
+            <input id="triviaA" type="text" maxlength="100" required placeholder="Wyld">
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Add question</button></div>
+        </form>
+        <div class="a-list" id="triviaList"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Uploaded days</h2>
+        <div class="a-table-wrap" id="dayList"></div>
+      </section>
+
+      <section class="a-card">
+        <h2>Settings</h2>
+        <form id="settingsForm" class="a-grid2">
+          <div class="a-field">
+            <label for="rotateSecs">Seconds per panel</label>
+            <input id="rotateSecs" type="number" min="6" max="90" step="1" placeholder="15">
+          </div>
+          <div class="a-field">
+            <label for="minDay">Min orders, yesterday</label>
+            <input id="minDay" type="number" min="1" step="1" placeholder="10">
+          </div>
+          <div class="a-field">
+            <label for="minMonth">Min orders, month to date</label>
+            <input id="minMonth" type="number" min="1" step="1" placeholder="50">
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="exclude">Leave off the leaderboards (comma separated)</label>
+            <input id="exclude" type="text" placeholder="Mark, Jeff, Doobie">
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Save settings</button></div>
+        </form>
+      </section>
+    </div>
+  </div>
+  <datalist id="nameList"></datalist>
+  <div class="a-toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ================= config ================= */
+  var COLS = 28, ROWS = 12;
+  var ROOT = 'sohoBoard';
+  var PIN = 'SOHO2026';
+  var DEFAULT_EXCLUDE = 'Mark, Jeff, Doobie';
+  var firebaseConfig = {
+    apiKey: "AIzaSyAbThlHXnpbRGcgZ9bYfwr1_-0TaRZtWPA",
+    authDomain: "july--contest.firebaseapp.com",
+    databaseURL: "https://july--contest-default-rtdb.firebaseio.com",
+    projectId: "july--contest",
+    storageBucket: "july--contest.firebasestorage.app",
+    messagingSenderId: "449733163467",
+    appId: "1:449733163467:web:e09d0f43e1bae05f0c9e4e"
+  };
+
+  var DATA = {};
+  var loaded = false;
+  var isAdmin = location.hash.replace('#', '').toLowerCase() === 'admin';
+  var db = null, rootRef = null;
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    rootRef = db.ref(ROOT);
+  } catch (e) { db = null; }
+
+  window.addEventListener('hashchange', function () { location.reload(); });
+
+  /* ================= shared helpers ================= */
+  var DOW = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+  var MON = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+  function ymd(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function parseYmd(s) { var p = s.split('-'); return new Date(+p[0], +p[1] - 1, +p[2], 12); }
+  function addDays(s, n) { var d = parseYmd(s); d.setDate(d.getDate() + n); return ymd(d); }
+  function todayStr() { return ymd(new Date()); }
+  function shortDate(s) { var d = parseYmd(s); return DOW[d.getDay()].slice(0, 3) + ' ' + MON[d.getMonth()].slice(0, 3) + ' ' + d.getDate(); }
+  function monthName(s) { return MON[parseYmd(s).getMonth()]; }
+  function daysInMonth(s) { var d = parseYmd(s); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); }
+  function money(n) { return '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
+  function vals(o) { return o ? Object.keys(o).map(function (k) { return o[k]; }) : []; }
+  function safeKey(s) { return String(s).trim().replace(/[.#$\[\]\/]/g, '_') || '_'; }
+  function S() { return DATA.settings || {}; }
+  function num(v, d) { v = Number(v); return isFinite(v) && v > 0 ? v : d; }
+  function days() { return DATA.days || {}; }
+  function daysBetween(a, b) { return Math.round((parseYmd(b) - parseYmd(a)) / 86400000); }
+  function shortMD(s) { var d = parseYmd(s); return MON[d.getMonth()].slice(0, 3) + ' ' + d.getDate(); }
+  function isLeap(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
+  function byNewest(a, b) { return (b.addedAt || 0) - (a.addedAt || 0); }
+  function anyToYmd(v) {
+    if (v == null || v === '') return null;
+    var s = String(v).trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (m) { var y = +m[3]; if (y < 100) y += 2000; return y + '-' + pad2(+m[1]) + '-' + pad2(+m[2]); }
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? null : ymd(d);
+  }
+
+  /* misdispense log (Google Sheet behind the misdispense page) */
+  var MIS_URL = 'https://script.google.com/macros/s/AKfycbw4UjJ644UWUo-ZvUK0IRu5C17J4THepEoowWCsiVqjfmQP8zvOyXXjmaXlGsX1-v1b/exec?action=get';
+  var MIS = { dates: [], loaded: false, error: false };
+  function fetchMis(cb) {
+    if (!window.fetch) { MIS.error = true; if (cb) cb(); return; }
+    fetch(MIS_URL + '&_t=' + Date.now()).then(function (r) { return r.text(); }).then(function (t) {
+      var data = JSON.parse(t);
+      var set = {};
+      ((data && data.entries) || []).forEach(function (e) { var d = anyToYmd(e && e.date); if (d) set[d] = 1; });
+      MIS.dates = Object.keys(set).sort();
+      MIS.loaded = true; MIS.error = false;
+    }).catch(function () { MIS.error = true; }).then(function () { if (cb) cb(); });
+  }
+  function misStats() {
+    var t = todayStr();
+    var dates = MIS.dates.slice();
+    var manual = S().misdispenseReset;
+    if (manual && /^\d{4}-\d{2}-\d{2}$/.test(manual)) dates.push(manual);
+    dates = dates.filter(function (d) { return d <= t; }).sort();
+    if (!dates.length) return null;
+    var last = dates[dates.length - 1];
+    var current = daysBetween(last, t), best = 0;
+    for (var i = 1; i < dates.length; i++) best = Math.max(best, daysBetween(dates[i - 1], dates[i]));
+    return { last: last, current: current, best: best, record: Math.max(best, current), count: dates.length };
+  }
+
+  /* birthdays and work anniversaries */
+  function nextOccur(mmdd, today) {
+    var y = +today.slice(0, 4), mm = +mmdd.slice(0, 2), dd = +mmdd.slice(3, 5);
+    function mk(year) { var d = (mm === 2 && dd === 29 && !isLeap(year)) ? 28 : dd; return year + '-' + pad2(mm) + '-' + pad2(d); }
+    var c = mk(y);
+    if (c < today) c = mk(y + 1);
+    return c;
+  }
+  function celebrations(withinDays) {
+    var t = todayStr(), out = [];
+    vals(DATA.team).forEach(function (p) {
+      if (!p || !p.name) return;
+      if (p.bday && /^\d{2}-\d{2}$/.test(p.bday)) {
+        var d = nextOccur(p.bday, t);
+        out.push({ date: d, name: p.name, kind: 'bday', days: daysBetween(t, d) });
+      }
+      if (p.start && /^\d{4}-\d{2}-\d{2}$/.test(p.start)) {
+        var d2 = nextOccur(p.start.slice(5), t);
+        var yrs = +d2.slice(0, 4) - +p.start.slice(0, 4);
+        if (yrs >= 1) out.push({ date: d2, name: p.name, kind: 'anniv', years: yrs, days: daysBetween(t, d2) });
+      }
+    });
+    return out.filter(function (e) { return e.days <= withinDays; })
+      .sort(function (a, b) { return a.days - b.days || String(a.name).localeCompare(String(b.name)); });
+  }
+
+  /* trivia */
+  var TRIVIA = [
+    { q: 'Which terpene gives lemons, oranges and a lot of citrusy strains their smell?', a: 'Limonene' },
+    { q: 'Which terpene smells like a pine forest?', a: 'Pinene' },
+    { q: "Black pepper's spicy kick comes from which terpene that's also common in cannabis?", a: 'Beta-caryophyllene' },
+    { q: 'Linalool is the main scent compound in which purple flower?', a: 'Lavender' },
+    { q: 'Humulene is named after the plant that makes beer bitter. What is it?', a: 'Hops' },
+    { q: 'Myrcene is found in cannabis and in which tropical fruit?', a: 'Mango' },
+    { q: 'What does THC stand for?', a: 'Tetrahydrocannabinol' },
+    { q: 'What does CBD stand for?', a: 'Cannabidiol' },
+    { q: 'Raw flower is mostly THCA. What turns THCA into THC?', a: "Heat. It's called decarboxylation." },
+    { q: 'Which tiny resin glands on the flower make most of the cannabinoids and terpenes?', a: 'Trichomes' },
+    { q: 'How many grams are in an eighth?', a: '3.5 grams' },
+    { q: 'How many grams are in an ounce?', a: 'About 28 (28.35 to be exact)' },
+    { q: 'What makes live resin different from a regular extract?', a: "It's made from fresh-frozen plants instead of dried and cured ones" },
+    { q: 'Rosin is made with only two things. What are they?', a: 'Heat and pressure. No solvents.' },
+    { q: "What's the golden rule for a first-time edible customer?", a: 'Start low and go slow' },
+    { q: 'What is kief?', a: 'The loose trichomes that sift off the flower' },
+    { q: 'What do you call the big cluster of buds at the top of the plant?', a: 'The cola' },
+    { q: 'Under federal law, hemp can have no more than what percent delta-9 THC by dry weight?', a: '0.3 percent' },
+    { q: 'Why do edibles take longer to kick in than smoking?', a: "They're digested and processed by the liver first, so it can take 30 minutes to 2 hours" },
+    { q: "What does 'full spectrum' mean on a label?", a: "It keeps a broad range of the plant's cannabinoids and terpenes, not one isolated compound" }
+  ];
+  function triviaList() {
+    var custom = vals(DATA.trivia).filter(function (x) { return x && x.q && x.a; })
+      .sort(function (a, b) { return (a.addedAt || 0) - (b.addedAt || 0); });
+    return custom.concat(S().builtinTrivia === false ? [] : TRIVIA);
+  }
+
+  var PANELS = [
+    ['home', 'Sales and goals'],
+    ['mis', 'Days without a misdispense'],
+    ['uptDay', 'UPT leaders, yesterday'],
+    ['atvDay', 'ATV leaders, yesterday'],
+    ['uptMonth', 'UPT leaders, month to date'],
+    ['atvMonth', 'ATV leaders, month to date'],
+    ['stars', 'Star Board'],
+    ['quote', 'Google review quotes'],
+    ['shout', 'Shout-outs'],
+    ['spotlight', 'Product spotlight'],
+    ['celebrate', 'Birthdays and anniversaries'],
+    ['trivia', 'Trivia'],
+    ['message', 'Board message']
+  ];
+  function panelOn(name) {
+    var key = (name === 'trivQ' || name === 'trivA') ? 'trivia' : name;
+    var p = S().panels || {};
+    return p[key] !== false;
+  }
+
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+
+  function excludeTerms() {
+    var raw = S().exclude;
+    if (raw == null) raw = DEFAULT_EXCLUDE;
+    return String(raw).split(',').map(function (t) { return t.trim().toLowerCase(); }).filter(Boolean);
+  }
+  function isExcluded(name, terms) {
+    var n = String(name).toLowerCase().trim();
+    var words = n.split(/\s+/);
+    for (var i = 0; i < terms.length; i++) {
+      var t = terms[i];
+      if (t.indexOf(' ') >= 0 ? n.indexOf(t) >= 0 : words.indexOf(t) >= 0) return true;
+    }
+    return false;
+  }
+  function latestDay() {
+    var t = todayStr();
+    var keys = Object.keys(days()).filter(function (k) { return k < t; }).sort();
+    return keys.length ? keys[keys.length - 1] : null;
+  }
+  function boardMonth() {
+    var ld = latestDay();
+    return (ld || todayStr()).slice(0, 7);
+  }
+  function monthDays(mk) {
+    return Object.keys(days()).filter(function (k) { return k.slice(0, 7) === mk && k < todayStr(); }).sort();
+  }
+  function leaders(dayKeys, metric, minTxn) {
+    var agg = {};
+    dayKeys.forEach(function (k) {
+      var b = (days()[k] || {}).budtenders || {};
+      Object.keys(b).forEach(function (id) {
+        var x = b[id];
+        if (!agg[id]) agg[id] = { name: x.name || id, txn: 0, units: 0, net: 0 };
+        agg[id].txn += Number(x.txn) || 0;
+        agg[id].units += Number(x.units) || 0;
+        agg[id].net += Number(x.net) || 0;
+      });
+    });
+    var terms = excludeTerms();
+    return vals(agg).filter(function (a) {
+      return a.txn >= minTxn && !isExcluded(a.name, terms);
+    }).map(function (a) {
+      a.upt = a.units / a.txn;
+      a.atv = a.net / a.txn;
+      return a;
+    }).sort(function (a, b) { return b[metric] - a[metric]; });
+  }
+  function rosterNames() {
+    var terms = excludeTerms();
+    var seen = {}, out = [];
+    function add(n) {
+      n = String(n || '').trim();
+      if (!n || isExcluded(n, terms)) return;
+      var k = safeKey(n).toLowerCase();
+      if (seen[k]) return;
+      seen[k] = 1; out.push(n);
+    }
+    var mk = todayStr().slice(0, 7);
+    vals(((DATA.stars || {})[mk]) || {}).forEach(function (s) { add(s.name); });
+    vals(DATA.roster || {}).forEach(function (r) { add(r.name); });
+    var recent = Object.keys(days()).sort().slice(-31);
+    recent.forEach(function (k) { vals((days()[k] || {}).budtenders).forEach(function (b) { add(b.name); }); });
+    return out.sort(function (a, b) { return a.localeCompare(b); });
+  }
+
+  /* ================= board text helpers ================= */
+  var ALLOWED = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$()-+&=;:'\"%,./?";
+  function clean(s) {
+    s = String(s == null ? '' : s);
+    if (s.normalize) s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    s = s.toUpperCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+      .replace(/[–—]/g, '-').replace(/…/g, '...');
+    var out = [];
+    for (var i = 0; i < s.length; i++) out.push(ALLOWED.indexOf(s.charAt(i)) >= 0 ? s.charAt(i) : ' ');
+    return out;
+  }
+  function blank() { var r = []; for (var i = 0; i < COLS; i++) r.push(' '); return r; }
+  function put(r, col, cells) {
+    for (var i = 0; i < cells.length; i++) { var c = col + i; if (c >= 0 && c < COLS) r[c] = cells[i]; }
+    return r;
+  }
+  function txt(s, max) { var c = clean(s); if (max != null && c.length > max) c = c.slice(0, Math.max(0, max)); return c; }
+  function center(s) { var c = txt(s, COLS); return put(blank(), Math.floor((COLS - c.length) / 2), c); }
+  function lr(left, right) {
+    var r = blank();
+    var R = txt(right, COLS - 4);
+    put(r, COLS - 1 - R.length, R);
+    put(r, 1, txt(left, COLS - 3 - R.length));
+    return r;
+  }
+  function chips(code, n) { var a = []; for (var i = 0; i < n; i++) a.push('{' + code + '}'); return a; }
+  function rainbow() {
+    var seq = 'ROYGBV', r = [];
+    for (var i = 0; i < COLS; i++) r.push('{' + seq.charAt(Math.floor(i * seq.length / COLS)) + '}');
+    return r;
+  }
+  function edges(code) { var r = blank(); r[0] = '{' + code + '}'; r[COLS - 1] = '{' + code + '}'; return r; }
+  function bar(pct) {
+    var r = blank();
+    var label = txt(Math.round(pct * 100) + '%');
+    var w = COLS - 3 - label.length;
+    var filled = Math.max(0, Math.min(w, Math.round(Math.min(pct, 1) * w)));
+    var color = pct >= 1 ? 'G' : (pct >= 0.8 ? 'Y' : 'O');
+    for (var i = 0; i < w; i++) r[1 + i] = i < filled ? '{' + color + '}' : '{K}';
+    put(r, COLS - 1 - label.length, label);
+    return r;
+  }
+  function wrap(s, width) {
+    var words = String(s || '').replace(/\s+/g, ' ').trim().split(' ');
+    var lines = [], cur = '';
+    words.forEach(function (w) {
+      if (!w) return;
+      while (w.length > width) { if (cur) { lines.push(cur); cur = ''; } lines.push(w.slice(0, width)); w = w.slice(width); }
+      if (!cur) cur = w;
+      else if ((cur + ' ' + w).length <= width) cur += ' ' + w;
+      else { lines.push(cur); cur = w; }
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function fitLines(lines, max, width) {
+    if (lines.length <= max) return lines;
+    var out = lines.slice(0, max);
+    var last = out[max - 1];
+    if (last.length > width - 3) last = last.slice(0, width - 3).replace(/\s+\S*$/, '');
+    out[max - 1] = last + '...';
+    return out;
+  }
+  function framed(rows) {
+    var p = rows.slice(0, ROWS);
+    while (p.length < ROWS) p.push(blank());
+    return p;
+  }
+  function middle(rows, top, bottom) {
+    var space = bottom - top + 1;
+    var lead = Math.max(0, Math.floor((space - rows.length) / 2));
+    var out = [];
+    for (var i = 0; i < lead; i++) out.push(blank());
+    return out.concat(rows).slice(0, space);
+  }
+
+  /* ================= panels ================= */
+  function dayLabel(d) { return d === addDays(todayStr(), -1) ? 'YESTERDAY' : shortDate(d); }
+
+  function idlePanel() {
+    var now = new Date();
+    return framed([rainbow(), blank(), blank(), blank(), center('TTA SOHO'), blank(),
+      center(DOW[now.getDay()] + ' ' + MON[now.getMonth()].slice(0, 3) + ' ' + now.getDate()), blank(), blank(), blank(), blank(), rainbow()]);
+  }
+  function loadingPanel() {
+    return framed([rainbow(), blank(), blank(), blank(), center('TTA SOHO'), blank(), center('CONNECTING...'), blank(), blank(), blank(), blank(), rainbow()]);
+  }
+
+  function homePanel() {
+    var now = new Date();
+    var r = [rainbow(), lr('TTA SOHO', DOW[now.getDay()].slice(0, 3) + ' ' + MON[now.getMonth()].slice(0, 3) + ' ' + now.getDate())];
+    var ld = latestDay();
+    if (!ld) {
+      r = r.concat(middle([center('GOOD MORNING TEAM'), blank(), center("LET'S HAVE A GREAT DAY")], 2, 10));
+      while (r.length < ROWS - 1) r.push(blank());
+      r.push(rainbow());
+      return framed(r);
+    }
+    var d = days()[ld], s = S();
+    var dg = num(s.dailyGoal, 0), mg = num(s.monthlyGoal, 0);
+    var mk = ld.slice(0, 7), md = monthDays(mk);
+    var mtd = md.reduce(function (sum, k) { return sum + (Number(days()[k].netSales) || 0); }, 0);
+    var body = [];
+    body.push(lr(dayLabel(ld), money(d.netSales || 0)));
+    if (dg) { body.push(lr('DAILY GOAL', money(dg))); body.push(bar((d.netSales || 0) / dg)); }
+    body.push(blank());
+    var lastDayNum = parseYmd(ld).getDate(), dim = daysInMonth(ld);
+    var monthDone = lastDayNum === dim;
+    body.push(lr(monthName(ld) + (monthDone ? ' FINAL' : ' TO DATE'), money(mtd)));
+    if (mg) {
+      body.push(lr('MONTH GOAL', money(mg)));
+      body.push(bar(mtd / mg));
+      var left = dim - lastDayNum;
+      if (mtd >= mg) body.push(center('GOAL HIT! ' + money(mtd - mg) + ' OVER'));
+      else if (left > 0) body.push(center('NEED ' + money((mg - mtd) / left) + '/DAY TO HIT IT'));
+      else body.push(center(money(mg - mtd) + ' SHORT. NEW MONTH, NEW GOAL'));
+    } else if (md.length) {
+      body.push(center('AVERAGING ' + money(mtd / md.length) + ' A DAY'));
+    }
+    r = r.concat(middle(body, 2, 10));
+    while (r.length < ROWS - 1) r.push(blank());
+    r = r.slice(0, ROWS - 1);
+    r.push(rainbow());
+    return framed(r);
+  }
+
+  function leaderPanel(title, sub, list, fmt, foot, minTxn) {
+    var r = [center(title), center(sub), blank()];
+    if (!list.length) {
+      r = r.concat(middle([center('NO ONE QUALIFIES YET'), blank(), center('MIN ' + minTxn + ' ORDERS')], 3, 10));
+    } else {
+      list.slice(0, 8).forEach(function (a, i) {
+        var row = blank();
+        if (i < 3) row[0] = '{' + ['Y', 'W', 'O'][i] + '}';
+        put(row, 1, txt(String(i + 1)));
+        var v = txt(fmt(a));
+        put(row, COLS - 1 - v.length, v);
+        put(row, 3, txt(a.name, COLS - 1 - v.length - 1 - 3));
+        r.push(row);
+      });
+    }
+    while (r.length < ROWS - 1) r.push(blank());
+    r = r.slice(0, ROWS - 1);
+    r.push(center(foot));
+    return framed(r);
+  }
+  function fmtUpt(a) { return a.upt.toFixed(2); }
+  function fmtAtv(a) { return '$' + a.atv.toFixed(2); }
+
+  function dayLeaders(metric) {
+    var ld = latestDay();
+    if (!ld) return null;
+    var min = num(S().minTxnDay, 10);
+    var list = leaders([ld], metric, min);
+    var title = metric === 'upt' ? 'UPT LEADERS' : 'ATV LEADERS';
+    var sub = ld === addDays(todayStr(), -1) ? 'YESTERDAY - ' + shortDate(ld) : shortDate(ld);
+    return leaderPanel(title, sub, list, metric === 'upt' ? fmtUpt : fmtAtv,
+      metric === 'upt' ? 'UNITS PER ORDER' : 'AVERAGE TICKET', min);
+  }
+  function monthLeaders(metric) {
+    var ld = latestDay();
+    if (!ld) return null;
+    var mk = ld.slice(0, 7), md = monthDays(mk);
+    if (md.length < 2) return null;
+    var min = num(S().minTxnMonth, 50);
+    var list = leaders(md, metric, min);
+    var title = monthName(ld) + (metric === 'upt' ? ' UPT' : ' ATV');
+    return leaderPanel(title, 'MONTH TO DATE - ' + md.length + ' DAYS', list, metric === 'upt' ? fmtUpt : fmtAtv,
+      metric === 'upt' ? 'UNITS PER ORDER' : 'AVERAGE TICKET', min);
+  }
+
+  function starPanel() {
+    var mk = todayStr().slice(0, 7);
+    var st = vals(((DATA.stars || {})[mk]) || {}).filter(function (x) { return (Number(x.count) || 0) > 0; })
+      .sort(function (a, b) { return b.count - a.count || String(a.name).localeCompare(String(b.name)); });
+    var r = [center(MON[new Date().getMonth()] + ' STAR BOARD'), center('NAMED IN A GOOGLE REVIEW'), blank()];
+    if (!st.length) {
+      r = r.concat(middle([center('NO STARS YET THIS MONTH'), blank(), center('GET NAMED IN A REVIEW'), center('TO EARN THE FIRST ONE')], 3, 10));
+    } else {
+      st.slice(0, 7).forEach(function (x, i) {
+        var row = blank();
+        var c = Number(x.count) || 0;
+        var n = txt(String(c));
+        put(row, 1, txt(x.name, 10));
+        put(row, 12, chips('Y', Math.min(c, 12)));
+        put(row, COLS - 1 - n.length, n);
+        r.push(row);
+      });
+      var total = st.reduce(function (s, x) { return s + (Number(x.count) || 0); }, 0);
+      while (r.length < ROWS - 1) r.push(blank());
+      r = r.slice(0, ROWS - 1);
+      r.push(center(total + (total === 1 ? ' STAR' : ' STARS') + ' THIS MONTH'));
+    }
+    return framed(r);
+  }
+
+  function pickRecent(obj, cycle) {
+    var list = vals(obj).filter(function (x) { return x && x.text; }).sort(function (a, b) { return (b.addedAt || 0) - (a.addedAt || 0); }).slice(0, 12);
+    if (!list.length) return null;
+    return list[cycle % list.length];
+  }
+
+  function quotePanel(cycle) {
+    var q = pickRecent(DATA.quotes, cycle);
+    if (!q) return null;
+    var r = [put(center('FROM A GOOGLE REVIEW'), 0, ['{Y}']), blank()];
+    r[0][COLS - 1] = '{Y}';
+    var lines = fitLines(wrap('"' + q.text + '"', COLS - 2), 7, COLS - 2);
+    r = r.concat(middle(lines.map(center), 2, 8));
+    while (r.length < 10) r.push(blank());
+    r = r.slice(0, 10);
+    r.push(center('SHOUT-OUT TO ' + q.name));
+    var stars = blank(); put(stars, Math.floor((COLS - 5) / 2), chips('Y', 5));
+    r.push(stars);
+    return framed(r);
+  }
+
+  function shoutPanel(cycle) {
+    var s = pickRecent(DATA.shoutouts, cycle);
+    if (!s) return null;
+    var head = center('SHOUT-OUT'); head[0] = '{V}'; head[COLS - 1] = '{V}';
+    var r = [head, blank(), center(s.to), blank()];
+    var lines = fitLines(wrap(s.text, COLS - 2), 5, COLS - 2);
+    r = r.concat(middle(lines.map(center), 4, 9));
+    while (r.length < 10) r.push(blank());
+    r = r.slice(0, 10);
+    r.push(s.from ? center('- ' + s.from) : blank());
+    var foot = edges('V');
+    r.push(foot);
+    return framed(r);
+  }
+
+  function messagePanel() {
+    var m = String(S().message || '').trim();
+    if (!m) return null;
+    var lines = [];
+    m.split(/\n/).forEach(function (para) { lines = lines.concat(para.trim() ? wrap(para, COLS - 2) : ['']); });
+    lines = fitLines(lines, 10, COLS - 2);
+    var r = [edges('B')].concat(middle(lines.map(center), 1, 10));
+    while (r.length < ROWS - 1) r.push(blank());
+    r = r.slice(0, ROWS - 1);
+    r.push(edges('B'));
+    return framed(r);
+  }
+
+  var BIG = {
+    '0': [' ### ', '#   #', '#  ##', '# # #', '##  #', '#   #', ' ### '],
+    '1': ['  #  ', ' ##  ', '  #  ', '  #  ', '  #  ', '  #  ', ' ### '],
+    '2': [' ### ', '#   #', '    #', '   # ', '  #  ', ' #   ', '#####'],
+    '3': ['#####', '   # ', '  #  ', '   # ', '    #', '#   #', ' ### '],
+    '4': ['   # ', '  ## ', ' # # ', '#  # ', '#####', '   # ', '   # '],
+    '5': ['#####', '#    ', '#### ', '    #', '    #', '#   #', ' ### '],
+    '6': ['  ## ', ' #   ', '#    ', '#### ', '#   #', '#   #', ' ### '],
+    '7': ['#####', '    #', '   # ', '  #  ', ' #   ', ' #   ', ' #   '],
+    '8': [' ### ', '#   #', '#   #', ' ### ', '#   #', '#   #', ' ### '],
+    '9': [' ### ', '#   #', '#   #', ' ####', '    #', '   # ', ' ##  ']
+  };
+  function bigNumber(n, color) {
+    var s = String(n), rows = [];
+    var width = s.length * 5 + (s.length - 1);
+    var x0 = Math.floor((COLS - width) / 2);
+    for (var y = 0; y < 7; y++) {
+      var r = blank();
+      for (var k = 0; k < s.length; k++) {
+        var g = BIG[s.charAt(k)][y];
+        for (var x = 0; x < 5; x++) if (g.charAt(x) === '#') r[x0 + k * 6 + x] = '{' + color + '}';
+      }
+      rows.push(r);
+    }
+    return rows;
+  }
+  var MIS_TAGS = ['DOUBLE-CHECK EVERY PULL', 'MATCH THE SKU, NOT THE LOOK', 'READ IT BACK BEFORE YOU BAG', 'CHECK THE LABEL TWICE'];
+  function misPanel(cycle) {
+    var m = misStats();
+    if (!m) return null;
+    var r = [center('DAYS WITHOUT A MISDISPENSE'), blank()];
+    if (m.current > 9999) r = r.concat(middle([center(String(m.current))], 2, 8));
+    else r = r.concat(bigNumber(m.current, m.current === 0 ? 'R' : 'G'));
+    while (r.length < 9) r.push(blank());
+    r = r.slice(0, 9);
+    r.push(blank());
+    if (m.count > 1 && m.current > m.best) r.push(center('NEW RECORD!'));
+    else r.push(center('RECORD: ' + m.record + (m.record === 1 ? ' DAY' : ' DAYS')));
+    r.push(center(MIS_TAGS[cycle % MIS_TAGS.length]));
+    return framed(r);
+  }
+
+  function spotlightPanel(cycle) {
+    var list = vals(DATA.spotlights).filter(function (x) { return x && x.product; }).sort(byNewest).slice(0, 10);
+    if (!list.length) return null;
+    var p = list[cycle % list.length];
+    var head = center('PRODUCT SPOTLIGHT'); head[0] = '{O}'; head[COLS - 1] = '{O}';
+    var r = [head, blank()];
+    fitLines(wrap(p.product, COLS - 2), 2, COLS - 2).forEach(function (l) { r.push(center(l)); });
+    var price = String(p.price || '').trim();
+    if (price && /^[0-9.]+$/.test(price)) price = '$' + price;
+    if (p.brand && price) r.push(lr(p.brand, price));
+    else if (p.brand || price) r.push(center(p.brand || price));
+    r.push(blank());
+    var lines = [];
+    String(p.points || '').split(/\n/).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 3).forEach(function (pt) {
+      wrap(pt, COLS - 4).forEach(function (l, i) { lines.push((i === 0 ? '- ' : '  ') + l); });
+    });
+    lines.slice(0, Math.max(0, ROWS - 1 - r.length)).forEach(function (l) { r.push(put(blank(), 1, txt(l, COLS - 2))); });
+    while (r.length < ROWS - 1) r.push(blank());
+    r = r.slice(0, ROWS - 1);
+    r.push(center('RECOMMEND IT TODAY'));
+    return framed(r);
+  }
+
+  function confetti(shift) {
+    var seq = 'RYBGOVYRGBOV', r = [];
+    for (var i = 0; i < COLS; i++) r.push('{' + seq.charAt((i + shift) % seq.length) + '}');
+    return r;
+  }
+  function celebratePanel() {
+    var ev = celebrations(21);
+    if (!ev.length) return null;
+    var today = ev.filter(function (e) { return e.days === 0; });
+    var r;
+    if (today.length) {
+      var lines = [];
+      today.slice(0, 3).forEach(function (e) {
+        lines.push(center(e.kind === 'bday' ? 'HAPPY BIRTHDAY' : 'HAPPY ' + e.years + (e.years === 1 ? ' YEAR' : ' YEARS') + ' AT TTA'));
+        lines.push(center(e.name + '!'));
+        lines.push(blank());
+      });
+      lines.pop();
+      r = [confetti(0), blank()].concat(middle(lines, 2, 9));
+      while (r.length < ROWS - 1) r.push(blank());
+      r = r.slice(0, ROWS - 1);
+      r.push(confetti(5));
+      return framed(r);
+    }
+    r = [center('COMING UP'), center('BIRTHDAYS + ANNIVERSARIES'), blank()];
+    ev.slice(0, 8).forEach(function (e) {
+      var label = txt(e.kind === 'bday' ? 'BIRTHDAY' : e.years + (e.years === 1 ? ' YEAR' : ' YEARS'));
+      var row = blank();
+      put(row, 1, txt(e.days === 1 ? 'TMRW' : shortMD(e.date), 6));
+      put(row, COLS - 1 - label.length, label);
+      put(row, 8, txt(e.name, COLS - 1 - label.length - 1 - 8));
+      r.push(row);
+    });
+    return framed(r);
+  }
+
+  function triviaPick(cycle) {
+    var l = triviaList();
+    if (!l.length) return null;
+    var dn = Math.floor(parseYmd(todayStr()).getTime() / 86400000);
+    return l[(dn * 5 + cycle) % l.length];
+  }
+  function triviaQPanel(cycle) {
+    var t = triviaPick(cycle);
+    if (!t) return null;
+    var head = center('TRIVIA'); head[0] = '{B}'; head[COLS - 1] = '{B}';
+    var lines = fitLines(wrap(t.q, COLS - 2), 6, COLS - 2);
+    var r = [head, blank()].concat(middle(lines.map(center), 2, 9));
+    while (r.length < ROWS - 2) r.push(blank());
+    r = r.slice(0, ROWS - 2);
+    r.push(center('ANSWER IN A MINUTE...'));
+    r.push(edges('B'));
+    return framed(r);
+  }
+  function triviaAPanel(cycle) {
+    var t = triviaPick(cycle);
+    if (!t) return null;
+    var head = center('TRIVIA ANSWER'); head[0] = '{G}'; head[COLS - 1] = '{G}';
+    var body = fitLines(wrap(t.q, COLS - 2), 3, COLS - 2).map(center);
+    body.push(blank());
+    fitLines(wrap(t.a, COLS - 4), 5, COLS - 4).forEach(function (l) { var row = center(l); row[0] = '{G}'; body.push(row); });
+    var r = [head, blank()].concat(middle(body, 2, 10));
+    while (r.length < ROWS - 1) r.push(blank());
+    r = r.slice(0, ROWS - 1);
+    r.push(edges('G'));
+    return framed(r);
+  }
+
+  var ORDER = ['home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'uptMonth', 'shout', 'atvMonth', 'message'];
+  function build(name, cycle) {
+    if (!panelOn(name)) return null;
+    switch (name) {
+      case 'home': return homePanel();
+      case 'uptDay': return dayLeaders('upt');
+      case 'atvDay': return dayLeaders('atv');
+      case 'uptMonth': return monthLeaders('upt');
+      case 'atvMonth': return monthLeaders('atv');
+      case 'stars': return starPanel();
+      case 'quote': return quotePanel(cycle);
+      case 'shout': return shoutPanel(cycle);
+      case 'message': return messagePanel();
+      case 'mis': return misPanel(cycle);
+      case 'spotlight': return spotlightPanel(cycle);
+      case 'celebrate': return celebratePanel();
+      case 'trivQ': return triviaQPanel(cycle);
+      case 'trivA': return triviaAPanel(cycle);
+    }
+    return null;
+  }
+
+  /* ================= TV mode ================= */
+  function startTV() {
+    var tv = document.getElementById('tv');
+    var boardEl = document.getElementById('board');
+    tv.hidden = false;
+    var STILL = /[?&]still\b/.test(location.search);
+    var CYCLE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    var COLOR_CODES = 'ROYGBVW';
+    var tiles = [], cur = [], tgt = [], anim = [], running = false;
+
+    for (var i = 0; i < ROWS * COLS; i++) {
+      var el = document.createElement('div');
+      el.className = 't';
+      el.appendChild(document.createTextNode(''));
+      boardEl.appendChild(el);
+      tiles.push(el); cur.push(' '); tgt.push(' '); anim.push(null);
+    }
+
+    function sizeBoard() {
+      var vw = window.innerWidth, vh = window.innerHeight;
+      var outer = Math.round(Math.min(vw, vh) * 0.03);
+      var ratio = 0.76, gapR = 0.12;
+      var wByW = (vw - outer * 4) / (COLS + (COLS - 1) * gapR);
+      var wByH = (vh - outer * 4) / (ROWS / ratio + (ROWS - 1) * gapR);
+      var w = Math.max(4, Math.floor(Math.min(wByW, wByH)));
+      var h = Math.floor(w / ratio);
+      var g = Math.max(1, Math.round(w * gapR));
+      boardEl.style.gridTemplateColumns = 'repeat(' + COLS + ', ' + w + 'px)';
+      boardEl.style.gridAutoRows = h + 'px';
+      boardEl.style.gridGap = g + 'px';
+      boardEl.style.padding = outer + 'px';
+      boardEl.style.borderRadius = Math.round(outer * 0.5) + 'px';
+      var fs = Math.round(h * 0.66);
+      var radius = Math.max(1, Math.round(w * 0.07));
+      var seam = Math.max(1, Math.round(h * 0.025));
+      for (var j = 0; j < tiles.length; j++) {
+        var s = tiles[j].style;
+        s.fontSize = fs + 'px';
+        s.lineHeight = h + 'px';
+        s.borderRadius = radius + 'px';
+        s.setProperty('--seam-h', seam + 'px');
+      }
+    }
+    sizeBoard();
+    window.addEventListener('resize', sizeBoard);
+
+    function setTile(i, cell, flash) {
+      var el = tiles[i];
+      if (cell.charAt(0) === '{') {
+        el.className = 't c' + cell.charAt(1) + (flash ? ' f' : '');
+        el.firstChild.nodeValue = '';
+      } else {
+        el.className = flash ? 't f' : 't';
+        el.firstChild.nodeValue = cell === ' ' ? '' : cell;
+      }
+    }
+
+    function show(panel) {
+      var now = (window.performance && performance.now) ? performance.now() : Date.now();
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          var i = r * COLS + c, cell = panel[r][c] || ' ';
+          tgt[i] = cell;
+          if (cur[i] === cell) { anim[i] = null; continue; }
+          if (STILL) { setTile(i, cell, false); cur[i] = cell; continue; }
+          anim[i] = { at: now + c * 26 + r * 14 + Math.random() * 110, left: 2 + Math.floor(Math.random() * 5) };
+        }
+      }
+      if (!STILL && !running) { running = true; requestAnimationFrame(tick); }
+    }
+
+    function tick(now) {
+      var active = false;
+      for (var i = 0; i < anim.length; i++) {
+        var a = anim[i];
+        if (!a) continue;
+        active = true;
+        if (now < a.at) continue;
+        if (a.left > 0) {
+          var t = tgt[i];
+          var rnd = t.charAt(0) === '{'
+            ? '{' + COLOR_CODES.charAt(Math.floor(Math.random() * COLOR_CODES.length)) + '}'
+            : CYCLE_CHARS.charAt(Math.floor(Math.random() * CYCLE_CHARS.length));
+          setTile(i, rnd, a.left % 2 === 1);
+          a.left--;
+          a.at = now + 62;
+        } else {
+          setTile(i, tgt[i], false);
+          cur[i] = tgt[i];
+          anim[i] = null;
+        }
+      }
+      if (active) requestAnimationFrame(tick); else running = false;
+    }
+
+    var idx = 0, cycle = 0, currentName = null, timer = null;
+    function rotateMs() { return Math.max(6, Math.min(90, num(S().rotateSecs, 15))) * 1000; }
+    function next() {
+      if (!loaded) { show(loadingPanel()); schedule(); return; }
+      for (var tries = 0; tries < ORDER.length; tries++) {
+        var name = ORDER[idx];
+        idx = (idx + 1) % ORDER.length;
+        if (idx === 0) cycle++;
+        var p = null;
+        try { p = build(name, cycle); } catch (e) { p = null; }
+        if (p) { currentName = name; show(p); schedule(); return; }
+      }
+      currentName = null;
+      show(idlePanel());
+      schedule();
+    }
+    function schedule() { clearTimeout(timer); timer = setTimeout(next, rotateMs()); }
+    function refreshCurrent() {
+      if (!currentName) { next(); return; }
+      var p = null;
+      try { p = build(currentName, cycle); } catch (e) { p = null; }
+      if (p) show(p); else next();
+    }
+
+    show(loadingPanel());
+    if (rootRef) {
+      rootRef.on('value', function (snap) {
+        DATA = snap.val() || {};
+        var first = !loaded;
+        loaded = true;
+        if (first) next(); else refreshCurrent();
+      }, function () {
+        loaded = true;
+        next();
+      });
+      db.ref('.info/connected').on('value', function (snap) {
+        document.getElementById('dot').className = snap.val() ? 'on' : '';
+      });
+    } else {
+      show(framed([rainbow(), blank(), blank(), blank(), center('TTA SOHO'), blank(), center('CHECK THE INTERNET'), center('CONNECTION'), blank(), blank(), blank(), rainbow()]));
+    }
+
+    function misRefresh() { fetchMis(function () { if (currentName === 'mis') refreshCurrent(); }); }
+    misRefresh();
+    setInterval(misRefresh, 20 * 60 * 1000);
+
+    // Reload once a night so the TV picks up any updates to this page.
+    var n = new Date();
+    var at = new Date(n.getFullYear(), n.getMonth(), n.getDate() + (n.getHours() >= 4 ? 1 : 0), 4, 0, 0);
+    setTimeout(function () { location.reload(); }, at - n);
+  }
+
+  /* ================= Admin mode ================= */
+  function startAdmin() {
+    document.getElementById('admin').hidden = false;
+    document.body.style.background = 'var(--a-bg)';
+    var $ = function (id) { return document.getElementById(id); };
+    var base = location.href.split('#')[0];
+    $('openBoard').href = base;
+
+    var unlocked = false;
+    try { unlocked = sessionStorage.getItem('sohoBoardPin') === PIN; } catch (e) { }
+
+    $('gateForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if ($('pinInput').value.trim().toUpperCase() === PIN) {
+        try { sessionStorage.setItem('sohoBoardPin', PIN); } catch (e) { }
+        unlock();
+      } else {
+        $('gateMsg').textContent = "That PIN didn't match. Try again.";
+      }
+    });
+    if (unlocked) unlock();
+
+    var toastTimer = null;
+    function toast(text, bad) {
+      var t = $('toast');
+      t.textContent = text;
+      t.className = 'a-toast' + (bad ? ' bad' : '');
+      t.hidden = false;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { t.hidden = true; }, bad ? 7000 : 2800);
+    }
+    function failText(err) {
+      var m = String((err && err.message) || err || '');
+      if (/permission/i.test(m)) return "Couldn't save: the database refused the write. Check the Firebase rules for this project.";
+      return "Couldn't save. Check the connection and try again.";
+    }
+    function counter(inputId, countId, max) {
+      var i = $(inputId), c = $(countId);
+      var f = function () { c.textContent = i.value.length + ' / ' + max; };
+      i.addEventListener('input', f); f();
+    }
+
+    function unlock() {
+      $('gate').hidden = true;
+      $('adminMain').hidden = false;
+      $('preview').src = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'preview';
+      counter('quoteText', 'quoteCount', 220);
+      counter('shoutText', 'shoutCount', 160);
+      counter('msgText', 'msgCount', 200);
+      if (!rootRef) { toast("Couldn't reach the database. Check the internet connection.", true); return; }
+      db.ref('.info/connected').on('value', function (snap) {
+        var on = !!snap.val();
+        $('connState').className = 'a-status' + (on ? ' on' : '');
+        $('connState').textContent = on ? 'Live' : 'Offline';
+      });
+      var firstLoad = true;
+      rootRef.on('value', function (snap) {
+        DATA = snap.val() || {};
+        loaded = true;
+        if (firstLoad) { fillForms(); firstLoad = false; }
+        renderLists();
+      }, function (err) { toast(failText(err), true); });
+    }
+
+    function fillForms() {
+      var s = S();
+      $('dailyGoal').value = s.dailyGoal || '';
+      $('monthlyGoal').value = s.monthlyGoal || '';
+      $('rotateSecs').value = s.rotateSecs || '';
+      $('minDay').value = s.minTxnDay || '';
+      $('minMonth').value = s.minTxnMonth || '';
+      $('exclude').value = s.exclude == null ? DEFAULT_EXCLUDE : s.exclude;
+      $('msgText').value = s.message || '';
+      $('builtinTrivia').checked = s.builtinTrivia !== false;
+      $('misReset').value = s.misdispenseReset || '';
+      $('msgText').dispatchEvent(new Event('input'));
+    }
+
+    function renderLists() {
+      var names = rosterNames();
+      $('nameList').innerHTML = names.map(function (n) { return '<option value="' + esc(n) + '"></option>'; }).join('');
+
+      // Stars
+      var mk = todayStr().slice(0, 7);
+      $('starTitle').textContent = 'Star Board · ' + MON[new Date().getMonth()].charAt(0) + MON[new Date().getMonth()].slice(1).toLowerCase();
+      var st = ((DATA.stars || {})[mk]) || {};
+      var rows = names.map(function (n) { var k = safeKey(n); return { name: n, key: k, count: Number((st[k] || {}).count) || 0 }; });
+      rows.sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name); });
+      $('starList').innerHTML = rows.length ? rows.map(function (r) {
+        var s = '';
+        for (var i = 0; i < Math.min(r.count, 15); i++) s += '★';
+        return '<div class="a-item"><div class="grow"><div class="name">' + esc(r.name) + '</div><div class="a-stars">' + s + '</div></div>' +
+          '<button class="a-btn icon" type="button" data-star="-1" data-key="' + esc(r.key) + '" data-name="' + esc(r.name) + '" aria-label="Remove a star from ' + esc(r.name) + '">−</button>' +
+          '<span class="a-num">' + r.count + '</span>' +
+          '<button class="a-btn icon primary" type="button" data-star="1" data-key="' + esc(r.key) + '" data-name="' + esc(r.name) + '" aria-label="Add a star for ' + esc(r.name) + '">+</button></div>';
+      }).join('') : '<p class="a-empty">No names yet. Upload a report or add a name below.</p>';
+
+      // Quotes
+      var qs = Object.keys(DATA.quotes || {}).map(function (k) { var q = DATA.quotes[k]; q._k = k; return q; })
+        .sort(function (a, b) { return (b.addedAt || 0) - (a.addedAt || 0); });
+      $('quoteList').innerHTML = qs.length ? qs.map(function (q, i) {
+        return '<div class="a-item"><div class="grow"><div class="name">' + esc(q.name) + (i < 12 ? '' : ' <span class="sub">(not shown, only the newest 12 rotate)</span>') + '</div><div class="sub">"' + esc(q.text) + '"</div></div>' +
+          '<button class="a-btn small danger" type="button" data-del="quotes/' + esc(q._k) + '">Delete</button></div>';
+      }).join('') : '<p class="a-empty">No quotes yet.</p>';
+
+      // Shout-outs
+      var ss = Object.keys(DATA.shoutouts || {}).map(function (k) { var s = DATA.shoutouts[k]; s._k = k; return s; })
+        .sort(function (a, b) { return (b.addedAt || 0) - (a.addedAt || 0); });
+      $('shoutList').innerHTML = ss.length ? ss.map(function (s, i) {
+        return '<div class="a-item"><div class="grow"><div class="name">To ' + esc(s.to) + (s.from ? ' · from ' + esc(s.from) : '') + (i < 12 ? '' : ' <span class="sub">(not shown)</span>') + '</div><div class="sub">' + esc(s.text) + '</div></div>' +
+          '<button class="a-btn small danger" type="button" data-del="shoutouts/' + esc(s._k) + '">Delete</button></div>';
+      }).join('') : '<p class="a-empty">No shout-outs yet.</p>';
+
+      // Spotlights
+      var sp = Object.keys(DATA.spotlights || {}).map(function (k) { var x = DATA.spotlights[k]; x._k = k; return x; }).sort(byNewest);
+      $('spotList').innerHTML = sp.length ? sp.map(function (x, i) {
+        var pts = String(x.points || '').split(/\n/).filter(function (l) { return l.trim(); }).join(' · ');
+        return '<div class="a-item"><div class="grow"><div class="name">' + esc(x.product) + (i < 10 ? '' : ' <span class="sub">(not shown, only the newest 10 rotate)</span>') + '</div><div class="sub">' +
+          esc([x.brand, x.price].filter(Boolean).join(' · ')) + (pts ? '<br>' + esc(pts) : '') + '</div></div>' +
+          '<button class="a-btn small danger" type="button" data-del="spotlights/' + esc(x._k) + '">Delete</button></div>';
+      }).join('') : '<p class="a-empty">No spotlight yet.</p>';
+
+      // Team birthdays and anniversaries
+      var tm = Object.keys(DATA.team || {}).map(function (k) { var x = DATA.team[k]; x._k = k; return x; })
+        .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+      $('teamList').innerHTML = tm.length ? tm.map(function (x) {
+        var bits = [];
+        if (x.bday) { var mm = +x.bday.slice(0, 2), dd = +x.bday.slice(3, 5); bits.push('Birthday ' + MON[mm - 1].charAt(0) + MON[mm - 1].slice(1, 3).toLowerCase() + ' ' + dd); }
+        if (x.start) bits.push('Started ' + x.start);
+        return '<div class="a-item"><div class="grow"><div class="name">' + esc(x.name) + '</div><div class="sub">' + esc(bits.join(' · ')) + '</div></div>' +
+          '<button class="a-btn small danger" type="button" data-del="team/' + esc(x._k) + '">Delete</button></div>';
+      }).join('') : '<p class="a-empty">Nobody added yet.</p>';
+
+      // Trivia
+      var tv = Object.keys(DATA.trivia || {}).map(function (k) { var x = DATA.trivia[k]; x._k = k; return x; }).sort(byNewest);
+      $('triviaList').innerHTML = tv.length ? tv.map(function (x) {
+        return '<div class="a-item"><div class="grow"><div class="name">' + esc(x.q) + '</div><div class="sub">' + esc(x.a) + '</div></div>' +
+          '<button class="a-btn small danger" type="button" data-del="trivia/' + esc(x._k) + '">Delete</button></div>';
+      }).join('') : '<p class="a-empty">No questions of your own yet' + (S().builtinTrivia === false ? '.' : '. The built-in ones are running.') + '</p>';
+
+      renderMisInfo();
+
+      // Page toggles
+      $('panelToggles').innerHTML = PANELS.map(function (pp) {
+        var on = panelOn(pp[0]);
+        return '<label class="a-toggle' + (on ? '' : ' off') + '"><input type="checkbox" data-panel="' + pp[0] + '"' + (on ? ' checked' : '') + '>' + esc(pp[1]) + '</label>';
+      }).join('');
+
+      // Days
+      var dk = Object.keys(days()).sort().reverse();
+      $('dayList').innerHTML = dk.length ? '<table class="a-table"><thead><tr><th>Day</th><th class="r">Net sales</th><th class="r">Orders</th><th class="r">Budtenders</th><th></th></tr></thead><tbody>' +
+        dk.slice(0, 62).map(function (k) {
+          var d = days()[k];
+          return '<tr><td>' + esc(shortDate(k)) + '</td><td class="r">' + money(d.netSales || 0) + '</td><td class="r">' + (d.orders || 0) + '</td><td class="r">' + Object.keys(d.budtenders || {}).length + '</td>' +
+            '<td class="r"><button class="a-btn small danger" type="button" data-del="days/' + esc(k) + '" data-what="' + esc(shortDate(k)) + '">Delete</button></td></tr>';
+        }).join('') + '</tbody></table>' : '<p class="a-empty">Nothing uploaded yet.</p>';
+    }
+
+    // Star buttons and deletes
+    document.addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('button') : null;
+      if (!b || !rootRef) return;
+      if (b.dataset.star) {
+        var mk = todayStr().slice(0, 7);
+        var delta = Number(b.dataset.star);
+        var ref = rootRef.child('stars/' + mk + '/' + b.dataset.key);
+        var name = b.dataset.name;
+        ref.transaction(function (cur) {
+          cur = cur || { name: name, count: 0 };
+          cur.name = name;
+          cur.count = Math.max(0, (Number(cur.count) || 0) + delta);
+          return cur;
+        }).catch(function (err) { toast(failText(err), true); });
+      } else if (b.dataset.del) {
+        var what = b.dataset.what ? b.dataset.what + "'s sales" : 'this';
+        if (!confirm('Delete ' + what + '? This can\'t be undone.')) return;
+        rootRef.child(b.dataset.del).remove().then(function () { toast('Deleted.'); }).catch(function (err) { toast(failText(err), true); });
+      }
+    });
+
+    $('addNameForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var n = $('newName').value.trim();
+      if (!n) return;
+      rootRef.child('roster/' + safeKey(n)).set({ name: n }).then(function () { $('newName').value = ''; toast('Added ' + n + '.'); })
+        .catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('goalForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      rootRef.child('settings').update({
+        dailyGoal: Number($('dailyGoal').value) || 0,
+        monthlyGoal: Number($('monthlyGoal').value) || 0
+      }).then(function () { toast('Goals saved.'); }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('settingsForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      rootRef.child('settings').update({
+        rotateSecs: Number($('rotateSecs').value) || 0,
+        minTxnDay: Number($('minDay').value) || 0,
+        minTxnMonth: Number($('minMonth').value) || 0,
+        exclude: $('exclude').value.trim()
+      }).then(function () { toast('Settings saved.'); }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('quoteForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var name = $('quoteName').value.trim(), text = $('quoteText').value.trim();
+      if (!name || !text) return;
+      rootRef.child('quotes').push({ name: name, text: text, addedAt: Date.now() }).then(function () {
+        $('quoteText').value = ''; $('quoteName').value = ''; $('quoteText').dispatchEvent(new Event('input'));
+        toast('Quote added.');
+      }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('shoutForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var to = $('shoutTo').value.trim(), from = $('shoutFrom').value.trim(), text = $('shoutText').value.trim();
+      if (!to || !text) return;
+      rootRef.child('shoutouts').push({ to: to, from: from, text: text, addedAt: Date.now() }).then(function () {
+        $('shoutText').value = ''; $('shoutTo').value = ''; $('shoutText').dispatchEvent(new Event('input'));
+        toast('Shout-out posted.');
+      }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('msgSave').addEventListener('click', function () {
+      rootRef.child('settings/message').set($('msgText').value.trim()).then(function () { toast('Message saved.'); })
+        .catch(function (err) { toast(failText(err), true); });
+    });
+    function renderMisInfo() {
+      var el = $('misInfo');
+      if (!MIS.loaded && !MIS.error) { el.textContent = 'Checking the misdispense log…'; return; }
+      var m = misStats();
+      var parts = [];
+      if (MIS.error) parts.push("Couldn't reach the misdispense log right now.");
+      if (m) parts.push('Last misdispense: ' + shortDate(m.last) + ' (' + m.current + (m.current === 1 ? ' day' : ' days') + ' ago). Record: ' + m.record + (m.record === 1 ? ' day.' : ' days.'));
+      else if (!MIS.error) parts.push('No misdispenses logged yet. The panel shows up after the first one, or set a date below.');
+      el.textContent = parts.join(' ');
+    }
+    fetchMis(renderMisInfo);
+
+    $('misResetSave').addEventListener('click', function () {
+      var v = $('misReset').value;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) { toast('Pick a date first.', true); return; }
+      rootRef.child('settings/misdispenseReset').set(v).then(function () { toast('Counter date saved.'); }).catch(function (err) { toast(failText(err), true); });
+    });
+    $('misResetClear').addEventListener('click', function () {
+      $('misReset').value = '';
+      rootRef.child('settings/misdispenseReset').remove().then(function () { toast('Manual date cleared.'); }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('spotForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var product = $('spotProduct').value.trim();
+      if (!product) return;
+      rootRef.child('spotlights').push({
+        product: product, brand: $('spotBrand').value.trim(), price: $('spotPrice').value.trim(),
+        points: $('spotPoints').value.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 3).join('\n'),
+        addedAt: Date.now()
+      }).then(function () {
+        ['spotProduct', 'spotBrand', 'spotPrice', 'spotPoints'].forEach(function (id) { $(id).value = ''; });
+        toast('Spotlight added.');
+      }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    (function buildBdaySelects() {
+      var ms = '<option value="">Month</option>';
+      for (var i = 0; i < 12; i++) ms += '<option value="' + pad2(i + 1) + '">' + MON[i].charAt(0) + MON[i].slice(1).toLowerCase() + '</option>';
+      var ds = '<option value="">Day</option>';
+      for (var d = 1; d <= 31; d++) ds += '<option value="' + pad2(d) + '">' + d + '</option>';
+      $('bdayMonth').innerHTML = ms;
+      $('bdayDay').innerHTML = ds;
+    })();
+    $('teamForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var name = $('teamName').value.trim();
+      var mm = $('bdayMonth').value, dd = $('bdayDay').value, start = $('teamStart').value;
+      if (!name) return;
+      if ((mm && !dd) || (!mm && dd)) { toast('Pick both a month and a day for the birthday.', true); return; }
+      if (!mm && !start) { toast('Add a birthday, a start date, or both.', true); return; }
+      rootRef.child('team/' + safeKey(name)).set({ name: name, bday: mm ? mm + '-' + dd : '', start: start || '' }).then(function () {
+        $('teamName').value = ''; $('bdayMonth').value = ''; $('bdayDay').value = ''; $('teamStart').value = '';
+        toast('Saved ' + name + '.');
+      }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('panelToggles').addEventListener('change', function (ev) {
+      var cb = ev.target;
+      if (!cb.dataset || !cb.dataset.panel) return;
+      rootRef.child('settings/panels/' + cb.dataset.panel).set(cb.checked)
+        .then(function () { toast((cb.checked ? 'Turned on: ' : 'Turned off: ') + cb.parentNode.textContent + '.'); })
+        .catch(function (err) { cb.checked = !cb.checked; toast(failText(err), true); });
+    });
+
+    $('builtinTrivia').addEventListener('change', function () {
+      rootRef.child('settings/builtinTrivia').set(this.checked).then(function () { toast('Trivia updated.'); }).catch(function (err) { toast(failText(err), true); });
+    });
+    $('triviaForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var q = $('triviaQ').value.trim(), a = $('triviaA').value.trim();
+      if (!q || !a) return;
+      rootRef.child('trivia').push({ q: q, a: a, addedAt: Date.now() }).then(function () {
+        $('triviaQ').value = ''; $('triviaA').value = '';
+        toast('Question added.');
+      }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('msgClear').addEventListener('click', function () {
+      $('msgText').value = ''; $('msgText').dispatchEvent(new Event('input'));
+      rootRef.child('settings/message').set('').then(function () { toast('Message cleared.'); })
+        .catch(function (err) { toast(failText(err), true); });
+    });
+
+    /* ---------- Dutchie report parsing ---------- */
+    var pending = [];
+    function loadXLSX() {
+      return new Promise(function (resolve, reject) {
+        if (window.XLSX) { resolve(); return; }
+        var s = document.createElement('script');
+        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+        s.onload = function () { resolve(); };
+        s.onerror = function () { reject(new Error("Couldn't load the spreadsheet reader. Check the internet connection.")); };
+        document.head.appendChild(s);
+      });
+    }
+    function parseNum(v) {
+      if (typeof v === 'number') return v;
+      var s = String(v == null ? '' : v).trim();
+      if (!s) return 0;
+      var neg = /^\(.*\)$/.test(s) || /^-/.test(s) || /^\$-/.test(s);
+      var n = parseFloat(s.replace(/[^0-9.]/g, '')) || 0;
+      return neg ? -n : n;
+    }
+    function toYmd(v) {
+      if (v instanceof Date && !isNaN(v)) return ymd(v);
+      var s = String(v == null ? '' : v).trim();
+      var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) return m[1] + '-' + pad2(+m[2]) + '-' + pad2(+m[3]);
+      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+      if (m) { var y = +m[3]; if (y < 100) y += 2000; return y + '-' + pad2(+m[1]) + '-' + pad2(+m[2]); }
+      return null;
+    }
+    function round2(n) { return Math.round(n * 100) / 100; }
+
+    function readFile(file) {
+      return new Promise(function (resolve, reject) {
+        var fr = new FileReader();
+        fr.onload = function () { resolve(fr.result); };
+        fr.onerror = function () { reject(new Error("Couldn't read " + file.name + '.')); };
+        fr.readAsArrayBuffer(file);
+      });
+    }
+
+    function parseReport(file, buf) {
+      var wb = XLSX.read(buf, { type: 'array' });
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+      var hi = -1;
+      for (var i = 0; i < Math.min(rows.length, 60); i++) {
+        var low = (rows[i] || []).map(function (c) { return String(c).trim().toLowerCase(); });
+        if (low.indexOf('order id') >= 0 && (low.indexOf('budtender name') >= 0 || low.indexOf('budtender') >= 0 || low.indexOf('employee') >= 0)) { hi = i; break; }
+      }
+      if (hi < 0) throw new Error(file.name + ": couldn't find the Budtender Name and Order ID columns. Use the same Dutchie report as the ATV contest.");
+      var H = rows[hi].map(function (c) { return String(c).trim().toLowerCase(); });
+      function col(names) { for (var j = 0; j < names.length; j++) { var k = H.indexOf(names[j]); if (k >= 0) return k; } return -1; }
+      var C = {
+        order: col(['order id']),
+        bud: col(['budtender name', 'budtender', 'employee']),
+        units: col(['total inventory sold', 'inventory sold', 'quantity sold', 'quantitysold', 'qty']),
+        net: col(['net sales', 'netsales']),
+        date: -1
+      };
+      for (var k = 0; k < H.length; k++) { if (/date/.test(H[k]) && !/export/.test(H[k])) { C.date = k; break; } }
+      if (C.units < 0 || C.net < 0) throw new Error(file.name + ': missing the Total Inventory Sold or Net Sales column.');
+
+      var from = null, to = null;
+      for (var m = 0; m < hi; m++) {
+        var label = String((rows[m] || [])[0] || '').trim().toLowerCase();
+        if (label.indexOf('from') === 0) from = toYmd(rows[m][1]);
+        if (label.indexOf('to') === 0) to = toYmd(rows[m][1]);
+      }
+      if (C.date < 0 && from && to && from !== to) {
+        throw new Error(file.name + ' covers ' + shortDate(from) + ' to ' + shortDate(to) + " and doesn't break sales out by day. Export one day at a time.");
+      }
+      var reportDay = (from && (!to || from === to)) ? from : null;
+
+      var byDay = {};
+      for (var r = hi + 1; r < rows.length; r++) {
+        var row = rows[r];
+        if (!row) continue;
+        var oid = String(row[C.order] || '').trim();
+        if (!oid) continue;
+        var day = (C.date >= 0 ? toYmd(row[C.date]) : null) || reportDay || '?';
+        var D = byDay[day] || (byDay[day] = { net: 0, orderIds: {}, orders: {} });
+        var net = parseNum(row[C.net]), units = parseNum(row[C.units]);
+        D.net += net;
+        D.orderIds[oid] = 1;
+        var name = String(row[C.bud] || '').trim();
+        if (!name || units <= 0 || net <= 0) continue;
+        var o = D.orders[oid] || (D.orders[oid] = { name: name, units: 0, net: 0 });
+        o.units += units; o.net += net;
+      }
+      return Object.keys(byDay).map(function (dk) {
+        var D = byDay[dk], b = {};
+        Object.keys(D.orders).forEach(function (oid) {
+          var o = D.orders[oid], key = safeKey(o.name);
+          if (!b[key]) b[key] = { name: o.name, txn: 0, units: 0, net: 0 };
+          b[key].txn++; b[key].units += o.units; b[key].net += o.net;
+        });
+        Object.keys(b).forEach(function (key) { b[key].units = round2(b[key].units); b[key].net = round2(b[key].net); });
+        return { date: dk === '?' ? null : dk, file: file.name, netSales: round2(D.net), orders: Object.keys(D.orderIds).length, budtenders: b };
+      });
+    }
+
+    $('reportFile').addEventListener('change', function (ev) {
+      var files = Array.prototype.slice.call(ev.target.files || []);
+      ev.target.value = '';
+      if (!files.length) return;
+      $('uploadMsg').textContent = '';
+      $('parsed').innerHTML = '<p class="a-hint">Reading…</p>';
+      loadXLSX().then(function () {
+        return Promise.all(files.map(function (f) {
+          return readFile(f).then(function (buf) { return parseReport(f, buf); }).catch(function (err) { return { error: err.message }; });
+        }));
+      }).then(function (results) {
+        pending = [];
+        var errors = [];
+        results.forEach(function (res) {
+          if (res && res.error) errors.push(res.error);
+          else pending = pending.concat(res);
+        });
+        $('uploadMsg').textContent = errors.join(' ');
+        renderPending();
+      }).catch(function (err) {
+        $('parsed').innerHTML = '';
+        $('uploadMsg').textContent = err.message;
+      });
+    });
+
+    function renderPending() {
+      if (!pending.length) { $('parsed').innerHTML = ''; return; }
+      var y = addDays(todayStr(), -1);
+      var html = '<div class="a-table-wrap"><table class="a-table"><thead><tr><th>Day</th><th class="r">Net sales</th><th class="r">Orders</th><th class="r">Budtenders</th><th>File</th></tr></thead><tbody>';
+      pending.forEach(function (p, i) {
+        var exists = p.date && days()[p.date];
+        var dayCell = p.date
+          ? esc(shortDate(p.date)) + (exists ? ' <span class="sub" style="color:var(--a-muted)">(replaces)</span>' : '')
+          : '<input type="date" data-pdate="' + i + '" value="' + y + '" max="' + todayStr() + '" style="font:inherit;background:var(--a-field);color:var(--a-ink);border:1px solid var(--a-line);border-radius:8px;padding:6px 8px">';
+        html += '<tr><td>' + dayCell + '</td><td class="r">' + money(p.netSales) + '</td><td class="r">' + p.orders + '</td><td class="r">' + Object.keys(p.budtenders).length + '</td><td>' + esc(p.file) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      if (pending.some(function (p) { return !p.date; })) html += '<p class="a-hint">This report doesn\'t say which day it covers. Pick the day above before saving.</p>';
+      html += '<div class="a-row"><button class="a-btn primary" type="button" id="savePending">Save to board</button><button class="a-btn" type="button" id="cancelPending">Cancel</button></div>';
+      $('parsed').innerHTML = html;
+      $('cancelPending').addEventListener('click', function () { pending = []; renderPending(); });
+      $('savePending').addEventListener('click', savePending);
+    }
+
+    function savePending() {
+      var btn = $('savePending');
+      var writes = {};
+      for (var i = 0; i < pending.length; i++) {
+        var p = pending[i];
+        var date = p.date;
+        if (!date) { var inp = document.querySelector('[data-pdate="' + i + '"]'); date = inp ? inp.value : null; }
+        if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('uploadMsg').textContent = 'Pick a day for every report first.'; return; }
+        writes['days/' + date] = { netSales: p.netSales, orders: p.orders, budtenders: p.budtenders, file: p.file, uploadedAt: Date.now() };
+      }
+      btn.disabled = true;
+      rootRef.update(writes).then(function () {
+        var n = Object.keys(writes).length;
+        pending = []; renderPending();
+        toast('Saved ' + n + (n === 1 ? ' day' : ' days') + ' to the board.');
+      }).catch(function (err) { btn.disabled = false; toast(failText(err), true); });
+    }
+  }
+
+  if (isAdmin) startAdmin(); else startTV();
+})();
+</script>
+</body>
+</html>
