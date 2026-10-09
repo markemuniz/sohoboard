@@ -402,7 +402,7 @@
             <input id="minMonth" type="number" min="1" step="1" placeholder="50">
           </div>
           <div class="a-field" style="grid-column:1/-1">
-            <label for="exclude">Leave off the leaderboards (comma separated)</label>
+            <label for="exclude">Leave off the leaderboards (comma separated, *word* hides any name containing it)</label>
             <input id="exclude" type="text" placeholder="Mark, Jeff, Doobie">
           </div>
           <div class="a-row"><button class="a-btn primary" type="submit">Save settings</button></div>
@@ -592,6 +592,7 @@
     var words = n.split(/\s+/);
     for (var i = 0; i < terms.length; i++) {
       var t = terms[i];
+      if (t.indexOf('*') >= 0) { if (n.indexOf(t.replace(/\*/g, '')) >= 0) return true; continue; }
       if (t.indexOf(' ') >= 0 ? n.indexOf(t) >= 0 : words.indexOf(t) >= 0) return true;
     }
     return false;
