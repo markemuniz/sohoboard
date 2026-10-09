@@ -460,7 +460,7 @@
   function daysInMonth(s) { var d = parseYmd(s); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); }
   function money(n) { return '$' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ','); }
   function vals(o) { return o ? Object.keys(o).map(function (k) { return o[k]; }) : []; }
-  function safeKey(s) { return String(s).trim().replace(/[.#$\[\]\/]/g, '_') || '_'; }
+  function safeKey(s) { return String(s).replace(/[\s\u0000-\u001F\u007F]+/g, ' ').trim().replace(/[.#$\[\]\/]/g, '_') || '_'; }
   function S() { return DATA.settings || {}; }
   function num(v, d) { v = Number(v); return isFinite(v) && v > 0 ? v : d; }
   function days() { return DATA.days || {}; }
@@ -1592,7 +1592,7 @@
         var net = parseNum(row[C.net]), units = parseNum(row[C.units]);
         D.net += net;
         D.orderIds[oid] = 1;
-        var name = String(row[C.bud] || '').trim();
+        var name = String(row[C.bud] || '').replace(/[\s\u0000-\u001F\u007F]+/g, ' ').trim();
         if (!name || units <= 0 || net <= 0) continue;
         var o = D.orders[oid] || (D.orders[oid] = { name: name, units: 0, net: 0 });
         o.units += units; o.net += net;
