@@ -740,7 +740,7 @@
     var r = [rainbow(), lr('TTA SOHO', DOW[now.getDay()].slice(0, 3) + ' ' + MON[now.getMonth()].slice(0, 3) + ' ' + now.getDate())];
     var ld = latestDay();
     if (!ld) {
-      r = r.concat(middle([center('GOOD MORNING TEAM'), blank(), center("LET'S HAVE A GREAT DAY")], 2, 10));
+      r = r.concat(middle([center((now.getHours() < 12 ? 'GOOD MORNING' : 'GOOD AFTERNOON') + ' TEAM'), blank(), center("LET'S HAVE A GREAT DAY")], 2, 10));
       while (r.length < ROWS - 1) r.push(blank());
       r.push(rainbow());
       return framed(r);
