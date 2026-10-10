@@ -560,7 +560,6 @@
   }
 
   var PANELS = [
-    ['welcome', 'Welcome message'],
     ['home', 'Sales and goals'],
     ['mis', 'Days without a misdispense'],
     ['uptDay', 'UPT leaders, yesterday'],
@@ -735,16 +734,6 @@
   }
   function loadingPanel() {
     return framed([rainbow(), blank(), blank(), blank(), center('TTA SOHO'), blank(), center('CONNECTING...'), blank(), blank(), blank(), blank(), rainbow()]);
-  }
-
-  function welcomePanel() {
-    var now = new Date(), h = now.getHours();
-    var hello = h < 12 ? 'GOOD MORNING' : (h < 17 ? 'GOOD AFTERNOON' : 'GOOD EVENING');
-    var r = [rainbow(), lr('TTA SOHO', DOW[now.getDay()].slice(0, 3) + ' ' + MON[now.getMonth()].slice(0, 3) + ' ' + now.getDate())];
-    r = r.concat(middle([center(hello + ' TEAM'), blank(), center("LET'S HAVE A GREAT DAY")], 2, 10));
-    while (r.length < ROWS - 1) r.push(blank());
-    r.push(rainbow());
-    return framed(r);
   }
 
   function homePanel() {
@@ -1037,11 +1026,10 @@
     return framed(r);
   }
 
-  var ORDER = ['welcome', 'home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'uptMonth', 'shout', 'atvMonth', 'message'];
+  var ORDER = ['home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'uptMonth', 'shout', 'atvMonth', 'message'];
   function build(name, cycle) {
     if (!panelOn(name)) return null;
     switch (name) {
-      case 'welcome': return welcomePanel();
       case 'home': return homePanel();
       case 'uptDay': return dayLeaders('upt');
       case 'atvDay': return dayLeaders('atv');
@@ -1180,7 +1168,8 @@
     }
 
     show(loadingPanel());
-    if (rootRef) {
+
+    function attachData() {
       rootRef.on('value', function (snap) {
         DATA = snap.val() || {};
         var first = !loaded;
@@ -1193,25 +1182,63 @@
       db.ref('.info/connected').on('value', function (snap) {
         document.getElementById('dot').className = snap.val() ? 'on' : '';
       });
-    } else {
-      show(framed([rainbow(), blank(), blank(), blank(), center('TTA SOHO'), blank(), center('CHECK THE INTERNET'), center('CONNECTION'), blank(), blank(), blank(), rainbow()]));
     }
+
+    // Pull in the Firebase library if it didn't load at page open (no internet
+    // yet). Loading it again, rather than reloading the whole page, is what
+    // keeps the TV full screen with no address bar.
+    function loadFirebaseLib() {
+      return new Promise(function (resolve, reject) {
+        if (window.firebase && firebase.database) { resolve(); return; }
+        var urls = [
+          'https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js',
+          'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js'
+        ];
+        var i = 0;
+        (function loadNext() {
+          if (i >= urls.length) {
+            if (window.firebase && firebase.database) resolve();
+            else reject(new Error('firebase unavailable'));
+            return;
+          }
+          var s = document.createElement('script');
+          s.src = urls[i++];
+          s.onload = loadNext;
+          s.onerror = function () { reject(new Error('load failed')); };
+          document.head.appendChild(s);
+        })();
+      });
+    }
+
+    // Connect to the data, and if the internet wasn't up yet, keep trying every
+    // 30 seconds in place. No page reload, so the board stays full screen and
+    // heals itself once Wi-Fi is back.
+    function connectData() {
+      if (rootRef) { attachData(); return; }
+      loadFirebaseLib().then(function () {
+        try {
+          if (!firebase.apps || !firebase.apps.length) firebase.initializeApp(firebaseConfig);
+          db = firebase.database();
+          rootRef = db.ref(ROOT);
+          attachData();
+        } catch (e) { retryConnect(); }
+      }).catch(retryConnect);
+    }
+    function retryConnect() {
+      show(framed([rainbow(), blank(), blank(), blank(), center('TTA SOHO'), blank(), center('RECONNECTING...'), blank(), blank(), blank(), blank(), rainbow()]));
+      setTimeout(connectData, 30 * 1000);
+    }
+    connectData();
 
     function misRefresh() { fetchMis(function () { if (currentName === 'mis') refreshCurrent(); }); }
     misRefresh();
     setInterval(misRefresh, 20 * 60 * 1000);
 
-    // Keep the TV awake and refresh the page every few minutes.
+    // Keep the TV awake.
     keepAwake();
-
-    // Refresh every 5 minutes so the TV picks up any updates to this page
-    // and clears any slow memory creep from running all day.
-    setInterval(function () {
-      // Only reload when the data is connected, so a brief outage doesn't
-      // bounce the board onto the "check the connection" screen.
-      if (!db || !loaded) { return; }
-      location.reload();
-    }, 5 * 60 * 1000);
+    // The board updates its numbers live from Firebase on its own, so it never
+    // reloads the page. Reloading would drop the TV browser out of full screen
+    // and bring its address bar back, so we update in place instead.
   }
 
   /* ================= keep the screen awake =================
