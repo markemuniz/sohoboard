@@ -163,6 +163,10 @@
   .a-toast.bad { background: var(--a-danger); color: #1A0503; }
   /* Emoji tiles: emoji glyphs sit smaller than capital letters, so bump them up. */
   .t.e { font-size: calc(var(--fs, 20px) * 1.18) !important; }
+  /* Photo tiles: each tile shows its own slice of a photo, so the picture flips in tile by tile. */
+  .t.p { background-color: #111; background-repeat: no-repeat; }
+  .t.p::after { background: rgba(0, 0, 0, 0.35); }
+  .a-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; }
 </style>
 </head>
 <body>
@@ -341,7 +345,7 @@
 
       <section class="a-card">
         <h2>Birthdays and anniversaries</h2>
-        <p class="a-hint">Birthdays save the month and day only. Check that people are OK with it before adding them. Start dates turn into work anniversaries.</p>
+        <p class="a-hint">Birthdays save the month and day only. Check that people are OK with it before adding them. Start dates turn into work anniversaries. Add a photo next to someone's name and it flips onto the board around their day. Ask before adding anyone's photo.</p>
         <form id="teamForm" class="a-grid2">
           <div class="a-field">
             <label for="teamName">Name</label>
@@ -516,16 +520,17 @@
   }
   function celebrations(withinDays) {
     var t = todayStr(), out = [];
-    vals(DATA.team).forEach(function (p) {
+    Object.keys(DATA.team || {}).forEach(function (tk) {
+      var p = DATA.team[tk];
       if (!p || !p.name) return;
       if (p.bday && /^\d{2}-\d{2}$/.test(p.bday)) {
         var d = nextOccur(p.bday, t);
-        out.push({ date: d, name: p.name, kind: 'bday', days: daysBetween(t, d) });
+        out.push({ date: d, name: p.name, key: tk, kind: 'bday', days: daysBetween(t, d) });
       }
       if (p.start && /^\d{4}-\d{2}-\d{2}$/.test(p.start)) {
         var d2 = nextOccur(p.start.slice(5), t);
         var yrs = +d2.slice(0, 4) - +p.start.slice(0, 4);
-        if (yrs >= 1) out.push({ date: d2, name: p.name, kind: 'anniv', years: yrs, days: daysBetween(t, d2) });
+        if (yrs >= 1) out.push({ date: d2, name: p.name, key: tk, kind: 'anniv', years: yrs, days: daysBetween(t, d2) });
       }
     });
     return out.filter(function (e) { return e.days <= withinDays; })
@@ -1002,9 +1007,41 @@
     for (var i = 0; i < COLS; i++) r.push('{' + seq.charAt((i + shift) % seq.length) + '}');
     return r;
   }
-  function celebratePanel() {
+  function photoCard(key, lines, party) {
+    var BW = 10, BH = 8, C0 = 1, R0 = 2, r = [];
+    for (var i = 0; i < ROWS; i++) r.push(blank());
+    for (var y = 0; y < BH; y++) for (var x = 0; x < BW; x++) r[R0 + y][C0 + x] = '\u0001' + key + '|' + x + '|' + y + '|' + BW + '|' + BH;
+    var tc = C0 + BW + 1, tw = COLS - tc - 1;
+    var start = Math.max(1, Math.floor((ROWS - lines.length) / 2));
+    lines.forEach(function (s, i) { var c = txt(s, tw); put(r[start + i], tc + Math.floor((tw - c.length) / 2), c); });
+    if (party) { r[0] = confetti(0); r[ROWS - 1] = confetti(5); }
+    return r;
+  }
+  // Someone with a photo: today it's their card, otherwise every other round
+  // swaps the coming-up list for a card of whoever's next with a photo.
+  function photoCelebrate(ev, cycle) {
+    var P = DATA.photos || {};
+    var today = ev.filter(function (e) { return e.days === 0; });
+    var e;
+    if (today.length) {
+      e = today[cycle % today.length];
+      if (!e.key || !P[e.key]) return null;
+      return photoCard(e.key, e.kind === 'bday'
+        ? ['HAPPY', 'BIRTHDAY', '', e.name + '!']
+        : ['HAPPY', e.years + (e.years === 1 ? ' YEAR' : ' YEARS'), 'AT TTA', '', e.name + '!'], true);
+    }
+    var up = ev.filter(function (x) { return x.key && P[x.key]; });
+    if (!up.length || cycle % 2 === 0) return null;
+    e = up[Math.floor(cycle / 2) % up.length];
+    return photoCard(e.key, ['COMING UP', '', e.name, '',
+      e.kind === 'bday' ? 'BIRTHDAY' : e.years + (e.years === 1 ? ' YEAR' : ' YEARS') + ' AT TTA',
+      e.days === 1 ? 'TOMORROW' : shortMD(e.date)], false);
+  }
+  function celebratePanel(cycle) {
     var ev = celebrations(21);
     if (!ev.length) return null;
+    var pc = photoCelebrate(ev, cycle || 0);
+    if (pc) return pc;
     var today = ev.filter(function (e) { return e.days === 0; });
     var r;
     if (today.length) {
@@ -1081,7 +1118,7 @@
       case 'message': return messagePanel();
       case 'mis': return misPanel(cycle);
       case 'spotlight': return spotlightPanel(cycle);
-      case 'celebrate': return celebratePanel();
+      case 'celebrate': return celebratePanel(cycle);
       case 'trivQ': return triviaQPanel(cycle);
       case 'trivA': return triviaAPanel(cycle);
     }
@@ -1106,6 +1143,28 @@
       tiles.push(el); cur.push(' '); tgt.push(' '); anim.push(null);
     }
 
+    var TW = 0, TH = 0, TG = 0;
+    function clearPhoto(el) {
+      if (!el._p) return;
+      el._p = false;
+      el.style.backgroundImage = ''; el.style.backgroundSize = ''; el.style.backgroundPosition = '';
+    }
+    // Photo cell: "\u0001key|x|y|blockWidth|blockHeight". The photo is scaled to cover the
+    // whole block of tiles and each tile shows only its own piece.
+    function photoTile(el, cell) {
+      var p = cell.slice(1).split('|');
+      var src = (DATA.photos || {})[p[0]];
+      el.className = 't p';
+      el.firstChild.nodeValue = '';
+      if (!src) { clearPhoto(el); return; }
+      var cx = +p[1], cy = +p[2], bw = +p[3], bh = +p[4];
+      var blockW = bw * TW + (bw - 1) * TG, blockH = bh * TH + (bh - 1) * TG;
+      var S = Math.max(blockW, blockH), ox = (S - blockW) / 2, oy = (S - blockH) / 2;
+      el.style.backgroundImage = 'url("' + src + '")';
+      el.style.backgroundSize = S + 'px ' + S + 'px';
+      el.style.backgroundPosition = (-(cx * (TW + TG) + ox)) + 'px ' + (-(cy * (TH + TG) + oy)) + 'px';
+      el._p = true;
+    }
     function sizeBoard() {
       var vw = window.innerWidth, vh = window.innerHeight;
       var outer = Math.round(Math.min(vw, vh) * 0.03);
@@ -1117,6 +1176,7 @@
       var g = Math.max(1, Math.round(w * gapR));
       boardEl.style.gridTemplateColumns = 'repeat(' + COLS + ', ' + w + 'px)';
       boardEl.style.gridAutoRows = h + 'px';
+      TW = w; TH = h; TG = g;
       boardEl.style.gridGap = g + 'px';
       boardEl.style.padding = outer + 'px';
       boardEl.style.borderRadius = Math.round(outer * 0.5) + 'px';
@@ -1133,10 +1193,15 @@
       }
     }
     sizeBoard();
-    window.addEventListener('resize', sizeBoard);
+    window.addEventListener('resize', function () {
+      sizeBoard();
+      for (var q = 0; q < tiles.length; q++) if (cur[q].charAt(0) === '\u0001') setTile(q, cur[q], false);
+    });
 
     function setTile(i, cell, flash) {
       var el = tiles[i];
+      if (cell.charAt(0) === '\u0001') { photoTile(el, cell); return; }
+      clearPhoto(el);
       if (cell.charAt(0) === '{') {
         el.className = 't c' + cell.charAt(1) + (flash ? ' f' : '');
         el.firstChild.nodeValue = '';
@@ -1458,11 +1523,16 @@
       // Team birthdays and anniversaries
       var tm = Object.keys(DATA.team || {}).map(function (k) { var x = DATA.team[k]; x._k = k; return x; })
         .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+      // Drop photos whose person was deleted.
+      Object.keys(DATA.photos || {}).forEach(function (pk) { if (!(DATA.team || {})[pk]) rootRef.child('photos/' + pk).remove(); });
       $('teamList').innerHTML = tm.length ? tm.map(function (x) {
         var bits = [];
         if (x.bday) { var mm = +x.bday.slice(0, 2), dd = +x.bday.slice(3, 5); bits.push('Birthday ' + MON[mm - 1].charAt(0) + MON[mm - 1].slice(1, 3).toLowerCase() + ' ' + dd); }
         if (x.start) bits.push('Started ' + x.start);
-        return '<div class="a-item"><div class="grow"><div class="name">' + esc(x.name) + '</div><div class="sub">' + esc(bits.join(' · ')) + '</div></div>' +
+        var ph = (DATA.photos || {})[x._k];
+        return '<div class="a-item">' + (ph ? '<img class="a-thumb" alt="" src="' + esc(ph) + '">' : '') + '<div class="grow"><div class="name">' + esc(x.name) + '</div><div class="sub">' + esc(bits.join(' · ')) + '</div></div>' +
+          '<label class="a-btn small">' + (ph ? 'Change photo' : 'Add photo') + '<input type="file" accept="image/*" data-photo="' + esc(x._k) + '" hidden></label>' +
+          (ph ? '<button class="a-btn small" type="button" data-unphoto="' + esc(x._k) + '">Remove photo</button>' : '') +
           '<button class="a-btn small danger" type="button" data-del="team/' + esc(x._k) + '">Delete</button></div>';
       }).join('') : '<p class="a-empty">Nobody added yet.</p>';
 
@@ -1618,6 +1688,41 @@
         $('teamName').value = ''; $('bdayMonth').value = ''; $('bdayDay').value = ''; $('teamStart').value = '';
         toast('Saved ' + name + '.');
       }).catch(function (err) { toast(failText(err), true); });
+    });
+
+    // Team photos: cropped square, shrunk to 320px and saved with the board data.
+    function photoToDataUrl(file) {
+      return new Promise(function (resolve, reject) {
+        var url = URL.createObjectURL(file), img = new Image();
+        img.onload = function () {
+          var S = 320, c = document.createElement('canvas');
+          c.width = S; c.height = S;
+          var w = img.naturalWidth, h = img.naturalHeight, m = Math.min(w, h);
+          var sx = (w - m) / 2, sy = (h - m) / 2 * 0.6;
+          c.getContext('2d').drawImage(img, sx, sy, m, m, 0, 0, S, S);
+          URL.revokeObjectURL(url);
+          resolve(c.toDataURL('image/jpeg', 0.82));
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("Couldn't read that photo. Try a JPG or PNG.")); };
+        img.src = url;
+      });
+    }
+    $('teamList').addEventListener('change', function (ev) {
+      var inp = ev.target, k = inp.getAttribute && inp.getAttribute('data-photo');
+      if (!k || !inp.files || !inp.files[0]) return;
+      var file = inp.files[0];
+      inp.value = '';
+      toast('Saving photo…');
+      photoToDataUrl(file).then(function (data) { return rootRef.child('photos/' + k).set(data); })
+        .then(function () { toast('Photo saved.'); })
+        .catch(function (err) { toast(err && err.message ? err.message : failText(err), true); });
+    });
+    $('teamList').addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-unphoto]');
+      if (!b) return;
+      rootRef.child('photos/' + b.getAttribute('data-unphoto')).remove()
+        .then(function () { toast('Photo removed.'); })
+        .catch(function (err) { toast(failText(err), true); });
     });
 
     $('panelToggles').addEventListener('change', function (ev) {
