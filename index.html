@@ -371,6 +371,28 @@
       </section>
 
       <section class="a-card">
+        <h2>Pet of the month</h2>
+        <p class="a-hint">Add a team pet's name and photo, then crop it so the pet fills the square. If there's more than one pet, the board takes turns.</p>
+        <form id="petForm" class="a-grid2">
+          <div class="a-field">
+            <label for="petName">Pet's name</label>
+            <input id="petName" type="text" maxlength="11" required placeholder="Biscuit">
+          </div>
+          <div class="a-field">
+            <label for="petOwner">Whose pet (optional)</label>
+            <input id="petOwner" type="text" maxlength="22" placeholder="Skye's dog">
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="petPhoto">Photo</label>
+            <input id="petPhoto" type="file" accept="image/*" required>
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Next: crop the photo</button></div>
+        </form>
+        <div id="petCrop"></div>
+        <div class="a-list" id="petList"></div>
+      </section>
+
+      <section class="a-card">
         <h2>Trivia</h2>
         <label class="a-row" for="builtinTrivia" style="font-size:15px">
           <input type="checkbox" id="builtinTrivia" style="width:20px;height:20px">
@@ -591,7 +613,11 @@
     ['spotlight', 'Product spotlight'],
     ['celebrate', 'Birthdays and anniversaries'],
     ['trivia', 'Trivia'],
-    ['message', 'Board message']
+    ['message', 'Board message'],
+    ['weather', 'SoHo weather'],
+    ['records', 'Record board'],
+    ['countdown', 'Green Wednesday countdown'],
+    ['pet', 'Pet of the month']
   ];
   function panelOn(name) {
     var key = (name === 'trivQ' || name === 'trivA') ? 'trivia' : (name === 'celebPhoto' ? 'celebrate' : name);
@@ -668,7 +694,7 @@
   }
 
   /* ================= board text helpers ================= */
-  var ALLOWED = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$()-+&=;:'\"%,./?";
+  var ALLOWED = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$()-+&=;:'\"%,./?°";
   // Emoji support: text is split into whole characters (graphemes) so an emoji,
   // even one built from several code points like a flag or a skin tone, lands
   // on a single tile. Anything else outside ALLOWED still becomes a blank tile.
@@ -1054,6 +1080,156 @@
       ? [e.days <= 21 ? 'COMING UP' : 'SOHO TEAM', '', e.name, '', 'BIRTHDAY', when]
       : [e.days <= 21 ? 'COMING UP' : 'SOHO TEAM', '', e.name, '', e.years + (e.years === 1 ? ' YEAR' : ' YEARS'), 'AT TTA', when], false);
   }
+  /* ---------- fun pages: records, Green Wednesday, pet of the month, weather ---------- */
+  var WX = null;
+  // Photo cells name their picture: a team member's key, or "pet:<id>".
+  function photoSrc(key) {
+    if (String(key).indexOf('pet:') === 0) { var pp = (DATA.pets || {})[key.slice(4)]; return pp && pp.photo; }
+    return (DATA.photos || {})[key];
+  }
+
+  // Record board: best day, most orders, best month, from the uploaded days.
+  // Days with under 20 orders (partial or test uploads) don't count.
+  function recordsPanel() {
+    var D = days();
+    var keys = Object.keys(D).filter(function (k) { return (Number(D[k].orders) || 0) >= 20 && (Number(D[k].netSales) || 0) > 0; }).sort();
+    if (!keys.length) return null;
+    var best = keys[0], most = keys[0], months = {};
+    keys.forEach(function (k) {
+      if (+D[k].netSales > +D[best].netSales) best = k;
+      if (+D[k].orders > +D[most].orders) most = k;
+      var m = k.slice(0, 7);
+      months[m] = (months[m] || 0) + (Number(D[k].netSales) || 0);
+    });
+    var bm = Object.keys(months).sort(function (a, b) { return months[b] - months[a]; })[0];
+    var newRec = keys.length >= 3 && latestDay() === best;
+    function sub(s) { return put(blank(), 3, txt(s, COLS - 4)); }
+    return framed([
+      newRec ? confetti(0) : rainbow(),
+      center(newRec ? '🎉 NEW RECORD! 🎉' : '🏆 RECORD BOARD 🏆'),
+      blank(),
+      lr('BEST DAY EVER', money(D[best].netSales)), sub(shortDate(best) + ' ' + best.slice(0, 4)),
+      blank(),
+      lr('MOST ORDERS', String(D[most].orders)), sub(shortDate(most) + ' ' + most.slice(0, 4)),
+      blank(),
+      lr('BEST MONTH', money(months[bm])), sub(monthName(bm + '-01') + ' ' + bm.slice(0, 4)),
+      newRec ? confetti(5) : rainbow()
+    ]);
+  }
+
+  // Green Wednesday: the Wednesday before Thanksgiving (4th Thursday of November).
+  function greenWed(year) {
+    var dow = new Date(year, 10, 1).getDay();
+    var thanks = 1 + ((4 - dow + 7) % 7) + 21;
+    return ymd(new Date(year, 10, thanks - 1));
+  }
+  var BIG = {
+    '0': ['###', '#.#', '#.#', '#.#', '###'], '1': ['.#.', '##.', '.#.', '.#.', '###'],
+    '2': ['###', '..#', '###', '#..', '###'], '3': ['###', '..#', '###', '..#', '###'],
+    '4': ['#.#', '#.#', '###', '..#', '..#'], '5': ['###', '#..', '###', '..#', '###'],
+    '6': ['###', '#..', '###', '#.#', '###'], '7': ['###', '..#', '..#', '..#', '..#'],
+    '8': ['###', '#.#', '###', '#.#', '###'], '9': ['###', '#.#', '###', '..#', '###']
+  };
+  // Big block digits made of color tiles, 3 wide and 5 tall each.
+  function bigNumber(n, code) {
+    var s = String(n), w = s.length * 4 - 1, c0 = Math.floor((COLS - w) / 2), rows = [];
+    for (var y = 0; y < 5; y++) {
+      var r = blank();
+      for (var i = 0; i < s.length; i++) {
+        var g = BIG[s.charAt(i)][y];
+        for (var x = 0; x < 3; x++) if (g.charAt(x) === '#') r[c0 + i * 4 + x] = '{' + code + '}';
+      }
+      rows.push(r);
+    }
+    return rows;
+  }
+  function countdownPanel() {
+    var t = todayStr(), gw = greenWed(+t.slice(0, 4));
+    if (gw < t) gw = greenWed(+t.slice(0, 4) + 1);
+    var n = daysBetween(t, gw);
+    if (n === 0) {
+      return framed([confetti(0), blank(), blank(), center("🌿 IT'S GREEN WEDNESDAY 🌿"), blank(), center('BIGGEST DAY OF THE YEAR'),
+        blank(), center("LET'S GOOOO!"), blank(), blank(), blank(), confetti(5)]);
+    }
+    var G = chips('G', COLS);
+    var r = [G, center('🌿 GREEN WEDNESDAY 🌿'), blank()].concat(bigNumber(n, 'G'));
+    r.push(blank());
+    r.push(center((n === 1 ? 'DAY TO GO - ' : 'DAYS TO GO - ') + shortDate(gw)));
+    r.push(center(n === 1 ? 'TOMORROW! GET READY!' : 'BIGGEST DAY OF THE YEAR'));
+    r.push(G);
+    return framed(r);
+  }
+
+  // Pet of the month: the photo in a rainbow tile frame with paw prints in the corners.
+  function petPanel(cycle) {
+    var P = DATA.pets || {};
+    var ids = Object.keys(P).filter(function (k) { return P[k] && P[k].photo && P[k].name; })
+      .sort(function (a, b) { return (P[a].addedAt || 0) - (P[b].addedAt || 0); });
+    if (!ids.length) return null;
+    var id = ids[cycle % ids.length], p = P[id], key = 'pet:' + id;
+    var FW = 15, FH = ROWS, r = [], x, y;
+    for (var i = 0; i < ROWS; i++) r.push(blank());
+    var ring = [];
+    for (x = 0; x < FW; x++) ring.push([0, x]);
+    for (y = 1; y < FH; y++) ring.push([y, FW - 1]);
+    for (x = FW - 2; x >= 0; x--) ring.push([FH - 1, x]);
+    for (y = FH - 2; y >= 1; y--) ring.push([y, 0]);
+    var seq = 'ROYGBV';
+    ring.forEach(function (rc, n) { r[rc[0]][rc[1]] = '{' + seq.charAt((Math.floor(n / 2) + cycle) % seq.length) + '}'; });
+    r[0][0] = r[0][FW - 1] = r[FH - 1][0] = r[FH - 1][FW - 1] = '🐾';
+    var BW = FW - 2, BH = FH - 2;
+    for (y = 0; y < BH; y++) for (x = 0; x < BW; x++) r[y + 1][x + 1] = '\u0001' + key + '|' + x + '|' + y + '|' + BW + '|' + BH;
+    var tc = FW + 1, tw = COLS - tc - 1, L = [];
+    ['🐾 PET OF 🐾', 'THE MONTH', '', p.name].concat(p.owner ? ['', p.owner] : []).forEach(function (s) {
+      if (s) L.push.apply(L, wrap(s, tw)); else L.push('');
+    });
+    L = L.slice(0, ROWS - 2);
+    var start = Math.max(1, Math.floor((ROWS - L.length) / 2));
+    L.forEach(function (s, i) { var c = txt(s, tw); put(r[start + i], tc + Math.floor((tw - c.length) / 2), c); });
+    return r;
+  }
+
+  // Weather for SoHo from Open-Meteo (free, no key). Refreshed every 15 minutes.
+  function wxInfo(code, isDay) {
+    code = Number(code);
+    if (code === 0) return isDay ? ['☀️', 'SUNNY', 'Y'] : ['🌙', 'CLEAR', 'B'];
+    if (code <= 2) return [isDay ? '⛅' : '☁️', 'PARTLY CLOUDY', 'W'];
+    if (code === 3) return ['☁️', 'CLOUDY', 'W'];
+    if (code === 45 || code === 48) return ['🌫️', 'FOGGY', 'W'];
+    if (code >= 51 && code <= 57) return ['🌦️', 'DRIZZLE', 'B'];
+    if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return ['🌧️', 'RAIN', 'B'];
+    if ((code >= 71 && code <= 77) || code === 85 || code === 86) return ['❄️', 'SNOW', 'W'];
+    if (code >= 95) return ['⛈️', 'STORMS', 'V'];
+    return ['🌤️', 'NICE OUT', 'Y'];
+  }
+  function wxVibe(word, t) {
+    if (word === 'RAIN' || word === 'DRIZZLE' || word === 'STORMS') return 'RAINY DAY = EDIBLES DAY 🍬';
+    if (word === 'SNOW') return 'SNOW DAY = COZY DAY ❄️';
+    if (t <= 40) return 'BUNDLE UP, STAY TOASTY 🔥';
+    if (t >= 85) return 'HOT ONE. STAY HYDRATED 💧';
+    if ((word === 'SUNNY' || word === 'CLEAR' || word === 'NICE OUT') && t >= 60) return 'PERFECT PRE-ROLL WEATHER 😎';
+    if (word === 'PARTLY CLOUDY' || word === 'CLOUDY' || word === 'FOGGY') return 'CLOUDY WITH A CHANCE OF 🌿';
+    return 'HAVE A GREAT SHIFT TEAM';
+  }
+  function weatherPanel() {
+    if (!WX || !WX.current || Date.now() - (WX._at || 0) > 3 * 3600 * 1000) return null;
+    var c = WX.current, d = WX.daily || {};
+    var info = wxInfo(c.weather_code, c.is_day);
+    var t = Math.round(c.temperature_2m), fl = Math.round(c.apparent_temperature);
+    var hi = d.temperature_2m_max ? Math.round(d.temperature_2m_max[0]) : null;
+    var lo = d.temperature_2m_min ? Math.round(d.temperature_2m_min[0]) : null;
+    var pr = d.precipitation_probability_max ? d.precipitation_probability_max[0] : null;
+    var bar = chips(info[2], COLS);
+    var r = [bar, center('SOHO WEATHER'), blank(), center(info[0] + ' ' + t + '° ' + info[1]), center('FEELS LIKE ' + fl + '°'), blank()];
+    if (hi != null && lo != null) r.push(lr('HIGH / LOW', hi + '° / ' + lo + '°'));
+    if (pr != null) r.push(lr('CHANCE OF RAIN', pr + '%'));
+    while (r.length < 9) r.push(blank());
+    r.push(center(wxVibe(info[1], t)));
+    r.push(blank());
+    r.push(bar);
+    return framed(r);
+  }
+
   // Its own slot right after the birthday list: one photo card per loop, taking turns
   // through everyone with a photo (soonest day first), however far off their day is.
   function celebPhotoPanel(cycle) {
@@ -1125,7 +1301,7 @@
     return framed(r);
   }
 
-  var ORDER = ['welcome', 'home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'celebPhoto', 'uptMonth', 'shout', 'atvMonth', 'message'];
+  var ORDER = ['welcome', 'weather', 'home', 'records', 'mis', 'uptDay', 'trivQ', 'stars', 'countdown', 'spotlight', 'atvDay', 'trivA', 'pet', 'quote', 'celebrate', 'celebPhoto', 'uptMonth', 'shout', 'atvMonth', 'message'];
   function build(name, cycle) {
     if (!panelOn(name)) return null;
     switch (name) {
@@ -1143,6 +1319,10 @@
       case 'spotlight': return spotlightPanel(cycle);
       case 'celebrate': return celebratePanel(cycle);
       case 'celebPhoto': return celebPhotoPanel(cycle);
+      case 'records': return recordsPanel();
+      case 'countdown': return countdownPanel();
+      case 'pet': return petPanel(cycle);
+      case 'weather': return weatherPanel();
       case 'trivQ': return triviaQPanel(cycle);
       case 'trivA': return triviaAPanel(cycle);
     }
@@ -1177,7 +1357,7 @@
     // whole block of tiles and each tile shows only its own piece.
     function photoTile(el, cell) {
       var p = cell.slice(1).split('|');
-      var src = (DATA.photos || {})[p[0]];
+      var src = photoSrc(p[0]);
       el.className = 't p';
       el.firstChild.nodeValue = '';
       if (!src) { clearPhoto(el); return; }
@@ -1441,6 +1621,19 @@
     }
     connectData();
 
+    function wxRefresh() {
+      if (!window.fetch) return;
+      var url = 'https://api.open-meteo.com/v1/forecast?latitude=40.7233&longitude=-74.0030' +
+        '&current=temperature_2m,apparent_temperature,weather_code,is_day' +
+        '&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max' +
+        '&temperature_unit=fahrenheit&timezone=America%2FNew_York&forecast_days=1';
+      fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.current) { j._at = Date.now(); WX = j; if (currentName === 'weather') refreshCurrent(); }
+      }).catch(function () { });
+    }
+    wxRefresh();
+    setInterval(wxRefresh, 15 * 60 * 1000);
+
     function misRefresh() { fetchMis(function () { if (currentName === 'mis') refreshCurrent(); }); }
     misRefresh();
     setInterval(misRefresh, 20 * 60 * 1000);
@@ -1630,6 +1823,15 @@
       // Team birthdays and anniversaries
       var tm = Object.keys(DATA.team || {}).map(function (k) { var x = DATA.team[k]; x._k = k; return x; })
         .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+      // Pets
+      var pets = Object.keys(DATA.pets || {}).map(function (k) { var x = DATA.pets[k]; x._k = k; return x; })
+        .sort(function (a, b) { return (a.addedAt || 0) - (b.addedAt || 0); });
+      $('petList').innerHTML = pets.length ? pets.map(function (x) {
+        return '<div class="a-item">' + (x.photo ? '<img class="a-thumb" alt="" src="' + esc(x.photo) + '">' : '') +
+          '<div class="grow"><div class="name">' + esc(x.name) + '</div><div class="sub">' + esc(x.owner || '') + '</div></div>' +
+          '<button class="a-btn small danger" type="button" data-del="pets/' + esc(x._k) + '">Delete</button></div>';
+      }).join('') : '<p class="a-empty">No pets yet.</p>';
+
       // Drop photos whose person was deleted.
       Object.keys(DATA.photos || {}).forEach(function (pk) { if (!(DATA.team || {})[pk]) rootRef.child('photos/' + pk).remove(); });
       $('teamList').innerHTML = tm.length ? tm.map(function (x) {
@@ -1825,12 +2027,15 @@
       openCropper(k, file);
     });
     // Crop step: drag to move, slider to zoom, so the face fills the square the board shows.
-    function openCropper(k, file) {
+    function openCropper(k, file, opts) {
+      opts = opts || {};
       var url = URL.createObjectURL(file), img = new Image();
       img.onload = function () {
-        var box = $('photoCrop');
+        ['photoCrop', 'petCrop'].forEach(function (id) { var ob = $(id); if (ob) ob.innerHTML = ''; });
+        var box = $(opts.boxId || 'photoCrop');
         if (!box) { box = document.createElement('div'); box.id = 'photoCrop'; $('teamList').insertAdjacentElement('afterend', box); }
-        var who = ((DATA.team || {})[k] || {}).name || 'their';
+        var who = opts.who || ((DATA.team || {})[k] || {}).name || 'their';
+        var GX = (opts.grid || [15, 12])[0], GY = (opts.grid || [15, 12])[1];
         box.innerHTML = '<div class="a-crop"><p class="a-hint" style="margin:0">Drag the photo and zoom in so ' + esc(who) + "'s face fills most of the square. The lines show the board's tiles.</p>" +
           '<canvas id="cropCv" width="560" height="560"></canvas>' +
           '<label for="cropZoom" class="a-hint" style="margin:0">Zoom</label><input id="cropZoom" type="range" min="1" max="6" step="0.01" value="1">' +
@@ -1854,8 +2059,8 @@
           clamp(); paint(cv, V);
           var g = cv.getContext('2d');
           g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 2;
-          for (var i = 1; i < 15; i++) { var x = Math.round(i * V / 15); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, V); g.stroke(); }
-          for (var j = 1; j < 12; j++) { var y = Math.round(j * V / 12); g.beginPath(); g.moveTo(0, y); g.lineTo(V, y); g.stroke(); }
+          for (var i = 1; i < GX; i++) { var x = Math.round(i * V / GX); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, V); g.stroke(); }
+          for (var j = 1; j < GY; j++) { var y = Math.round(j * V / GY); g.beginPath(); g.moveTo(0, y); g.lineTo(V, y); g.stroke(); }
         }
         render();
         cv.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY, cx: cx, cy: cy }; try { cv.setPointerCapture(e.pointerId); } catch (er) { } });
@@ -1881,7 +2086,7 @@
           clamp(); paint(out, 480);
           var data = out.toDataURL('image/jpeg', 0.85);
           toast('Saving photo…');
-          rootRef.child('photos/' + k).set(data).then(function () { toast('Photo saved.'); close(); })
+          (opts.save ? opts.save(data) : rootRef.child('photos/' + k).set(data)).then(function () { toast('Photo saved.'); close(); })
             .catch(function (err) { toast(failText(err), true); });
         });
       };
@@ -1894,6 +2099,18 @@
       rootRef.child('photos/' + b.getAttribute('data-unphoto')).remove()
         .then(function () { toast('Photo removed.'); })
         .catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('petForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var name = $('petName').value.trim(), owner = $('petOwner').value.trim();
+      var f = $('petPhoto').files && $('petPhoto').files[0];
+      if (!name || !f) { toast("Add the pet's name and a photo.", true); return; }
+      openCropper('pet', f, { who: name, boxId: 'petCrop', grid: [13, 10], save: function (data) {
+        return rootRef.child('pets').push({ name: name, owner: owner, photo: data, addedAt: Date.now() }).then(function () {
+          $('petName').value = ''; $('petOwner').value = ''; $('petPhoto').value = '';
+        });
+      } });
     });
 
     $('panelToggles').addEventListener('change', function (ev) {
