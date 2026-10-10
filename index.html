@@ -1039,25 +1039,25 @@
     var P = DATA.photos || {};
     var today = ev.filter(function (e) { return e.days === 0; });
     var e;
-    if (today.length) {
-      if (upcoming) return null;
+    if (today.length && !upcoming) {
       e = today[cycle % today.length];
       if (!e.key || !P[e.key]) return null;
       return photoCard(e.key, e.kind === 'bday'
         ? ['HAPPY', 'BIRTHDAY', '', e.name + '!']
         : ['HAPPY', e.years + (e.years === 1 ? ' YEAR' : ' YEARS'), 'AT TTA', '', e.name + '!'], true);
     }
-    var up = ev.filter(function (x) { return x.key && P[x.key]; });
+    var up = ev.filter(function (x) { return x.key && P[x.key] && x.days > 0; });
     if (!upcoming || !up.length) return null;
     e = up[cycle % up.length];
     var when = e.days === 1 ? 'TOMORROW' : shortMD(e.date);
     return photoCard(e.key, e.kind === 'bday'
-      ? ['COMING UP', '', e.name, '', 'BIRTHDAY', when]
-      : ['COMING UP', '', e.name, '', e.years + (e.years === 1 ? ' YEAR' : ' YEARS'), 'AT TTA', when], false);
+      ? [e.days <= 21 ? 'COMING UP' : 'SOHO TEAM', '', e.name, '', 'BIRTHDAY', when]
+      : [e.days <= 21 ? 'COMING UP' : 'SOHO TEAM', '', e.name, '', e.years + (e.years === 1 ? ' YEAR' : ' YEARS'), 'AT TTA', when], false);
   }
-  // Its own slot right after the birthday list: a photo card for whoever's coming up.
+  // Its own slot right after the birthday list: one photo card per loop, taking turns
+  // through everyone with a photo (soonest day first), however far off their day is.
   function celebPhotoPanel(cycle) {
-    var ev = celebrations(21);
+    var ev = celebrations(366);
     return ev.length ? photoCelebrate(ev, cycle || 0, true) : null;
   }
   function celebratePanel(cycle) {
