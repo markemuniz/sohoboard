@@ -411,6 +411,14 @@
             <label for="exclude">Leave off the leaderboards (comma separated, *word* hides any name containing it)</label>
             <input id="exclude" type="text" placeholder="Mark, Jeff, Doobie">
           </div>
+          <div class="a-field">
+            <label for="soundVol">Flap sound volume</label>
+            <select id="soundVol"><option value="0.15">Soft</option><option value="0.35">Medium</option><option value="0.7">Loud</option></select>
+          </div>
+          <label class="a-row" for="flapSound" style="font-size:15px;grid-column:1/-1">
+            <input type="checkbox" id="flapSound" style="width:20px;height:20px">
+            Play the flap sound on the TV. Browsers need one button press on the remote, or one click on the screen, before sound can start.
+          </label>
           <div class="a-row"><button class="a-btn primary" type="submit">Save settings</button></div>
         </form>
       </section>
@@ -1212,6 +1220,7 @@
     }
 
     function show(panel) {
+      var changed = [];
       var now = (window.performance && performance.now) ? performance.now() : Date.now();
       for (var r = 0; r < ROWS; r++) {
         for (var c = 0; c < COLS; c++) {
@@ -1220,13 +1229,90 @@
           if (cur[i] === cell) { if (anim[i]) setTile(i, cell, false); anim[i] = null; continue; }
           if (STILL) { setTile(i, cell, false); cur[i] = cell; continue; }
           anim[i] = { at: now + c * 26 + r * 14 + Math.random() * 110, left: 2 + Math.floor(Math.random() * 5) };
+          changed.push(i);
+        }
+      }
+      // Every now and then one or two tiles keep flipping a beat longer, like a real board.
+      if (changed.length && Math.random() < 0.6) {
+        var nLong = Math.random() < 0.4 ? 2 : 1;
+        for (var q = 0; q < nLong; q++) {
+          var li = changed[Math.floor(Math.random() * changed.length)];
+          anim[li].left += 10 + Math.floor(Math.random() * 14);
         }
       }
       if (!STILL && !running) { running = true; requestAnimationFrame(tick); }
     }
 
+    /* ---------- flap sound ----------
+       Made on the fly with Web Audio (no sound files): each flip is a tiny burst of
+       filtered noise, like a plastic flap snapping down. Browsers won't play sound
+       until someone interacts with the page once, so a remote button press or a
+       click on the TV unlocks it. The admin preview stays silent. */
+    var PREVIEW = /[?&]preview\b/.test(location.search);
+    var AC = null, master = null, noiseBuf = null, lastClick = 0, sndHint = null;
+    function soundWanted() { return !PREVIEW && S().sound !== false; }
+    function initAudio() {
+      if (AC) return AC;
+      var Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      try {
+        AC = new Ctx();
+        master = AC.createGain();
+        master.connect(AC.destination);
+        var len = Math.floor(AC.sampleRate * 0.04);
+        noiseBuf = AC.createBuffer(1, len, AC.sampleRate);
+        var d = noiseBuf.getChannelData(0);
+        for (var n = 0; n < len; n++) d[n] = (Math.random() * 2 - 1) * Math.pow(1 - n / len, 2);
+      } catch (e) { AC = null; }
+      return AC;
+    }
+    function unlockAudio() {
+      if (!soundWanted()) return;
+      var ac = initAudio();
+      if (ac && ac.state !== 'running' && ac.resume) ac.resume().then(updateHint, updateHint);
+      updateHint();
+    }
+    ['pointerdown', 'touchstart', 'keydown', 'click'].forEach(function (evName) {
+      window.addEventListener(evName, unlockAudio, true);
+    });
+    function updateHint() {
+      var show = soundWanted() && !(AC && AC.state === 'running');
+      if (show && !sndHint) {
+        sndHint = document.createElement('div');
+        sndHint.textContent = 'PRESS ANY BUTTON FOR SOUND';
+        sndHint.style.cssText = 'position:fixed;left:12px;bottom:6px;font:600 11px/1 var(--flap-font, sans-serif);letter-spacing:2px;color:#4A4A4A;pointer-events:none';
+        document.body.appendChild(sndHint);
+      }
+      if (sndHint) sndHint.style.display = show ? '' : 'none';
+    }
+    if (soundWanted()) { initAudio(); if (AC && AC.resume) AC.resume().then(updateHint, updateHint); updateHint(); }
+    function flapSound(flips) {
+      if (!soundWanted()) { updateHint(); return; }
+      if (!AC || AC.state !== 'running') { updateHint(); return; }
+      var vol = Math.max(0.02, Math.min(1, num(S().soundVol, 0.35)));
+      master.gain.value = vol;
+      var t0 = AC.currentTime, n = Math.min(3, flips);
+      for (var k = 0; k < n; k++) {
+        var at = Math.max(t0 + k * 0.006 + Math.random() * 0.01, lastClick + 0.004);
+        lastClick = at;
+        var src = AC.createBufferSource();
+        src.buffer = noiseBuf;
+        src.playbackRate.value = 0.85 + Math.random() * 0.4;
+        var bp = AC.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 1800 + Math.random() * 1600;
+        bp.Q.value = 1.4;
+        var g = AC.createGain();
+        g.gain.setValueAtTime(0.0001, at);
+        g.gain.exponentialRampToValueAtTime(0.5 + Math.random() * 0.5, at + 0.002);
+        g.gain.exponentialRampToValueAtTime(0.0001, at + 0.035);
+        src.connect(bp); bp.connect(g); g.connect(master);
+        src.start(at); src.stop(at + 0.045);
+      }
+    }
+
     function tick(now) {
-      var active = false;
+      var active = false, flips = 0;
       for (var i = 0; i < anim.length; i++) {
         var a = anim[i];
         if (!a) continue;
@@ -1238,14 +1324,17 @@
             ? '{' + COLOR_CODES.charAt(Math.floor(Math.random() * COLOR_CODES.length)) + '}'
             : CYCLE_CHARS.charAt(Math.floor(Math.random() * CYCLE_CHARS.length));
           setTile(i, rnd, a.left % 2 === 1);
+          flips++;
           a.left--;
           a.at = now + 62;
         } else {
           setTile(i, tgt[i], false);
+          flips++;
           cur[i] = tgt[i];
           anim[i] = null;
         }
       }
+      if (flips) flapSound(flips);
       if (active) requestAnimationFrame(tick); else running = false;
     }
 
@@ -1472,6 +1561,8 @@
       $('exclude').value = s.exclude == null ? DEFAULT_EXCLUDE : s.exclude;
       $('msgText').value = s.message || '';
       $('builtinTrivia').checked = s.builtinTrivia !== false;
+      $('flapSound').checked = s.sound !== false;
+      $('soundVol').value = String(s.soundVol || 0.35);
       $('misReset').value = s.misdispenseReset || '';
       $('msgText').dispatchEvent(new Event('input'));
     }
@@ -1605,7 +1696,9 @@
         rotateSecs: Number($('rotateSecs').value) || 0,
         minTxnDay: Number($('minDay').value) || 0,
         minTxnMonth: Number($('minMonth').value) || 0,
-        exclude: $('exclude').value.trim()
+        exclude: $('exclude').value.trim(),
+        sound: $('flapSound').checked,
+        soundVol: Number($('soundVol').value) || 0.35
       }).then(function () { toast('Settings saved.'); }).catch(function (err) { toast(failText(err), true); });
     });
 
