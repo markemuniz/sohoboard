@@ -162,6 +162,11 @@
   }
   .a-toast.bad { background: var(--a-danger); color: #1A0503; }
   /* Emoji tiles: emoji glyphs sit smaller than capital letters, so bump them up. */
+  /* Leaf tiles: the cannabis leaf picture sits on a normal flap. */
+  .t.leaf {
+    background-image: url("data:image/png;base64,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"), linear-gradient(180deg, var(--flap-hi) 0%, var(--flap) 49%, var(--flap-lo) 51%, var(--flap) 100%);
+    background-size: 82% auto, 100% 100%; background-position: center, center; background-repeat: no-repeat, no-repeat;
+  }
   .t.e { font-size: calc(var(--fs, 20px) * 1.18) !important; }
   /* Photo tiles: each tile shows its own slice of a photo, so the picture flips in tile by tile. */
   .t.p { background-color: #111; background-repeat: no-repeat; }
@@ -1410,8 +1415,10 @@
         el.className = 't c' + cell.charAt(1) + (flash ? ' f' : '');
         el.firstChild.nodeValue = '';
       } else {
-        el.className = (flash ? 't f' : 't') + (/[^\x00-\x7F]/.test(cell) ? ' e' : '');
-        el.firstChild.nodeValue = cell === ' ' ? '' : cell;
+        // The herb emoji shows as a real cannabis leaf picture instead.
+        var leaf = cell === '🌿';
+        el.className = (flash ? 't f' : 't') + (leaf ? ' leaf' : (/[^\x00-\x7F]/.test(cell) ? ' e' : ''));
+        el.firstChild.nodeValue = (cell === ' ' || leaf) ? '' : cell;
       }
     }
 
