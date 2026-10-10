@@ -1674,6 +1674,8 @@
       if (m) return m[1] + '-' + pad2(+m[2]) + '-' + pad2(+m[3]);
       m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
       if (m) { var y = +m[3]; if (y < 100) y += 2000; return y + '-' + pad2(+m[1]) + '-' + pad2(+m[2]); }
+      // Text dates like "Oct 2, 2026 3:15 PM"
+      if (/[a-z]/i.test(s) && /\d{4}/.test(s)) { var t = new Date(s); if (!isNaN(t)) return ymd(t); }
       return null;
     }
     function round2(n) { return Math.round(n * 100) / 100; }
@@ -1706,7 +1708,13 @@
         net: col(['net sales', 'netsales']),
         date: -1
       };
-      for (var k = 0; k < H.length; k++) { if (/date/.test(H[k]) && !/export/.test(H[k])) { C.date = k; break; } }
+      // Pick the column that dates each sale. Prefer an order or transaction date,
+      // and never a return, refund, export or birth date, which only some rows have.
+      var DATE_PREF = ['order date', 'transaction date', 'sale date', 'sold date', 'completed date', 'completed on', 'order time', 'transaction time', 'created date', 'date'];
+      for (var dp = 0; dp < DATE_PREF.length && C.date < 0; dp++) { var di = H.indexOf(DATE_PREF[dp]); if (di >= 0) C.date = di; }
+      for (var k = 0; k < H.length && C.date < 0; k++) {
+        if (/date/.test(H[k]) && !/export|return|refund|void|birth|expir|modif|updat/.test(H[k])) C.date = k;
+      }
       if (C.units < 0 || C.net < 0) throw new Error(file.name + ': missing the Total Inventory Sold or Net Sales column.');
 
       var from = null, to = null;
@@ -1735,6 +1743,14 @@
         if (!name || units <= 0 || net <= 0) continue;
         var o = D.orders[oid] || (D.orders[oid] = { name: name, units: 0, net: 0 });
         o.units += units; o.net += net;
+      }
+      // A report that spans several days must date every sale. If some rows have no
+      // usable date, stop rather than piling them all onto one day.
+      var spans = from && to && from !== to;
+      var dated = Object.keys(byDay).filter(function (k) { return k !== '?'; });
+      if (byDay['?'] && (spans || dated.length)) {
+        throw new Error(file.name + (spans ? ' covers ' + shortDate(from) + ' to ' + shortDate(to) : ' mixes days') +
+          " and some sales have no date, so they can't be split by day. Export one day at a time.");
       }
       return Object.keys(byDay).map(function (dk) {
         var D = byDay[dk], b = {};
