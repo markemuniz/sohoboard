@@ -816,7 +816,7 @@
     var now = new Date(), h = now.getHours();
     var hello = h < 12 ? 'GOOD MORNING' : (h < 17 ? 'GOOD AFTERNOON' : 'GOOD EVENING');
     var r = [rainbow(), lr('TTA SOHO', DOW[now.getDay()].slice(0, 3) + ' ' + MON[now.getMonth()].slice(0, 3) + ' ' + now.getDate())];
-    r = r.concat(middle([center(hello + ' TEAM'), blank(), center("LET'S HAVE A GREAT DAY")], 2, 10));
+    r = r.concat(middle([center('🌿 ' + hello + ' TEAM 🌿'), blank(), center("LET'S HAVE A GREAT DAY")], 2, 10));
     while (r.length < ROWS - 1) r.push(blank());
     r.push(rainbow());
     return framed(r);
@@ -1040,7 +1040,7 @@
     lines.slice(0, Math.max(0, ROWS - 1 - r.length)).forEach(function (l) { r.push(put(blank(), 1, txt(l, COLS - 2))); });
     while (r.length < ROWS - 1) r.push(blank());
     r = r.slice(0, ROWS - 1);
-    r.push(center('RECOMMEND IT TODAY'));
+    r.push(center('🌿 RECOMMEND IT TODAY 🌿'));
     return framed(r);
   }
 
@@ -1153,14 +1153,14 @@
     if (gw < t) gw = greenWed(+t.slice(0, 4) + 1);
     var n = daysBetween(t, gw);
     if (n === 0) {
-      return framed([confetti(0), blank(), blank(), center("🌿 IT'S GREEN WEDNESDAY 🌿"), blank(), center('BIGGEST DAY OF THE YEAR'),
+      return framed([confetti(0), blank(), blank(), center("🌿 IT'S GREEN WEDNESDAY 🌿"), blank(), center('2ND BIGGEST DAY OF THE YEAR'),
         blank(), center("LET'S GOOOO!"), blank(), blank(), blank(), confetti(5)]);
     }
     var G = chips('G', COLS);
     var r = [G, center('🌿 GREEN WEDNESDAY 🌿'), blank()].concat(bigNumber(n, 'G'));
     r.push(blank());
     r.push(center((n === 1 ? 'DAY TO GO - ' : 'DAYS TO GO - ') + shortDate(gw)));
-    r.push(center(n === 1 ? 'TOMORROW! GET READY!' : 'BIGGEST DAY OF THE YEAR'));
+    r.push(center(n === 1 ? 'TOMORROW! GET READY!' : '2ND BIGGEST DAY OF THE YEAR'));
     r.push(G);
     return framed(r);
   }
@@ -1283,7 +1283,7 @@
   function triviaQPanel(cycle) {
     var t = triviaPick(cycle);
     if (!t) return null;
-    var head = center('TRIVIA'); head[0] = '{B}'; head[COLS - 1] = '{B}';
+    var head = center('🌿 TRIVIA 🌿'); head[0] = '{B}'; head[COLS - 1] = '{B}';
     var lines = fitLines(wrap(t.q, COLS - 2), 6, COLS - 2);
     var r = [head, blank()].concat(middle(lines.map(center), 2, 9));
     while (r.length < ROWS - 2) r.push(blank());
