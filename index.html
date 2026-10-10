@@ -560,6 +560,7 @@
   }
 
   var PANELS = [
+    ['welcome', 'Welcome message'],
     ['home', 'Sales and goals'],
     ['mis', 'Days without a misdispense'],
     ['uptDay', 'UPT leaders, yesterday'],
@@ -734,6 +735,16 @@
   }
   function loadingPanel() {
     return framed([rainbow(), blank(), blank(), blank(), center('TTA SOHO'), blank(), center('CONNECTING...'), blank(), blank(), blank(), blank(), rainbow()]);
+  }
+
+  function welcomePanel() {
+    var now = new Date(), h = now.getHours();
+    var hello = h < 12 ? 'GOOD MORNING' : (h < 17 ? 'GOOD AFTERNOON' : 'GOOD EVENING');
+    var r = [rainbow(), lr('TTA SOHO', DOW[now.getDay()].slice(0, 3) + ' ' + MON[now.getMonth()].slice(0, 3) + ' ' + now.getDate())];
+    r = r.concat(middle([center(hello + ' TEAM'), blank(), center("LET'S HAVE A GREAT DAY")], 2, 10));
+    while (r.length < ROWS - 1) r.push(blank());
+    r.push(rainbow());
+    return framed(r);
   }
 
   function homePanel() {
@@ -1026,10 +1037,11 @@
     return framed(r);
   }
 
-  var ORDER = ['home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'uptMonth', 'shout', 'atvMonth', 'message'];
+  var ORDER = ['welcome', 'home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'uptMonth', 'shout', 'atvMonth', 'message'];
   function build(name, cycle) {
     if (!panelOn(name)) return null;
     switch (name) {
+      case 'welcome': return welcomePanel();
       case 'home': return homePanel();
       case 'uptDay': return dayLeaders('upt');
       case 'atvDay': return dayLeaders('atv');
