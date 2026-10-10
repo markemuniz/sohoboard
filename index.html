@@ -591,7 +591,7 @@
     ['message', 'Board message']
   ];
   function panelOn(name) {
-    var key = (name === 'trivQ' || name === 'trivA') ? 'trivia' : name;
+    var key = (name === 'trivQ' || name === 'trivA') ? 'trivia' : (name === 'celebPhoto' ? 'celebrate' : name);
     var p = S().panels || {};
     return p[key] !== false;
   }
@@ -1027,11 +1027,12 @@
   }
   // Someone with a photo: today it's their card, otherwise every other round
   // swaps the coming-up list for a card of whoever's next with a photo.
-  function photoCelebrate(ev, cycle) {
+  function photoCelebrate(ev, cycle, upcoming) {
     var P = DATA.photos || {};
     var today = ev.filter(function (e) { return e.days === 0; });
     var e;
     if (today.length) {
+      if (upcoming) return null;
       e = today[cycle % today.length];
       if (!e.key || !P[e.key]) return null;
       return photoCard(e.key, e.kind === 'bday'
@@ -1039,16 +1040,21 @@
         : ['HAPPY', e.years + (e.years === 1 ? ' YEAR' : ' YEARS'), 'AT TTA', '', e.name + '!'], true);
     }
     var up = ev.filter(function (x) { return x.key && P[x.key]; });
-    if (!up.length || cycle % 2 === 0) return null;
-    e = up[Math.floor(cycle / 2) % up.length];
+    if (!upcoming || !up.length) return null;
+    e = up[cycle % up.length];
     return photoCard(e.key, ['COMING UP', '', e.name, '',
       e.kind === 'bday' ? 'BIRTHDAY' : e.years + (e.years === 1 ? ' YEAR' : ' YEARS') + ' AT TTA',
       e.days === 1 ? 'TOMORROW' : shortMD(e.date)], false);
   }
+  // Its own slot right after the birthday list: a photo card for whoever's coming up.
+  function celebPhotoPanel(cycle) {
+    var ev = celebrations(21);
+    return ev.length ? photoCelebrate(ev, cycle || 0, true) : null;
+  }
   function celebratePanel(cycle) {
     var ev = celebrations(21);
     if (!ev.length) return null;
-    var pc = photoCelebrate(ev, cycle || 0);
+    var pc = photoCelebrate(ev, cycle || 0, false);
     if (pc) return pc;
     var today = ev.filter(function (e) { return e.days === 0; });
     var r;
@@ -1110,7 +1116,7 @@
     return framed(r);
   }
 
-  var ORDER = ['welcome', 'home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'uptMonth', 'shout', 'atvMonth', 'message'];
+  var ORDER = ['welcome', 'home', 'mis', 'uptDay', 'trivQ', 'stars', 'spotlight', 'atvDay', 'trivA', 'quote', 'celebrate', 'celebPhoto', 'uptMonth', 'shout', 'atvMonth', 'message'];
   function build(name, cycle) {
     if (!panelOn(name)) return null;
     switch (name) {
@@ -1127,6 +1133,7 @@
       case 'mis': return misPanel(cycle);
       case 'spotlight': return spotlightPanel(cycle);
       case 'celebrate': return celebratePanel(cycle);
+      case 'celebPhoto': return celebPhotoPanel(cycle);
       case 'trivQ': return triviaQPanel(cycle);
       case 'trivA': return triviaAPanel(cycle);
     }
