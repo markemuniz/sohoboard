@@ -1189,10 +1189,68 @@
     misRefresh();
     setInterval(misRefresh, 20 * 60 * 1000);
 
-    // Reload once a night so the TV picks up any updates to this page.
-    var n = new Date();
-    var at = new Date(n.getFullYear(), n.getMonth(), n.getDate() + (n.getHours() >= 4 ? 1 : 0), 4, 0, 0);
-    setTimeout(function () { location.reload(); }, at - n);
+    // Keep the TV awake and refresh the page every few minutes.
+    keepAwake();
+
+    // Refresh every 5 minutes so the TV picks up any updates to this page
+    // and clears any slow memory creep from running all day.
+    setInterval(function () {
+      // Only reload when the data is connected, so a brief outage doesn't
+      // bounce the board onto the "check the connection" screen.
+      if (!db || !loaded) { return; }
+      location.reload();
+    }, 5 * 60 * 1000);
+  }
+
+  /* ================= keep the screen awake =================
+     Fire TV's browser has a built-in idle sleep with no setting to turn it
+     off, so the page has to keep the screen busy itself. Three layers, since
+     no single one is reliable on Fire OS:
+       1. Screen Wake Lock API, re-acquired whenever the tab becomes visible.
+       2. A 1px muted looping video. Playing video is what Fire TV watches for
+          to decide the screen is in use; this is the part that usually does it.
+       3. A tiny invisible DOM nudge every 30 seconds as a last resort.
+     The wake lock and video only work on a real https:// page, not a file://
+     page opened straight off a USB stick or Downloads. */
+  function keepAwake() {
+    // 1. Wake Lock API
+    var wakeLock = null;
+    function requestLock() {
+      if (!('wakeLock' in navigator)) { return; }
+      navigator.wakeLock.request('screen').then(function (lock) {
+        wakeLock = lock;
+        lock.addEventListener('release', function () { wakeLock = null; });
+      }).catch(function () { /* denied or not allowed on this page; fall through to the video */ });
+    }
+    requestLock();
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible' && !wakeLock) { requestLock(); }
+    });
+
+    // 2. Tiny muted looping video (data URI, no network needed)
+    try {
+      var v = document.createElement('video');
+      v.setAttribute('playsinline', '');
+      v.muted = true; v.loop = true; v.autoplay = true;
+      v.style.cssText = 'position:fixed;width:1px;height:1px;left:0;bottom:0;opacity:0.01;pointer-events:none;z-index:-1';
+      // 1-frame black MP4
+      v.src = 'data:video/mp4;base64,AAAAHGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQAAAAhmcmVlAAAC721kYXQAAAGzABAHAAABthADAowdbb9/AAAC6W1vb3YAAABsbXZoZAAAAAAAAAAAAAAAAAAAA+gAAAAZAAEAAAEAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAhV0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAABkAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAGMbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAAB1MAAAC13FHAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABL21pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAO9zdGJsAAAAk3N0c2QAAAAAAAAAAQAAAINhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAY//8AAAAtYXZjQwFCwBX/4QAWZ0LAFdoYGCGhAAADAAEAAAMAAg8SJZYBAAVo6+ByLAAAABhzdHRzAAAAAAAAAAEAAAABAAALXcAAAAAcc3RzYwAAAAAAAAABAAAAAQAAAAEAAAABAAAAFHN0c3oAAAAAAAABtwAAAAEAAAAUc3RjbwAAAAAAAAABAAAAMAAAAGJ1ZHRhAAAAWm1ldGEAAAAAAAAAIWhkbHIAAAAAAAAAAG1kaXJhcHBsAAAAAAAAAAAAAAAALWlsc3QAAAAlqXRvbwAAAB1kYXRhAAAAAQAAAABMYXZmNTkuMjcuMTAw';
+      var playing = false;
+      function playVideo() { var p = v.play(); if (p && p.catch) { p.then(function(){ playing = true; }).catch(function () { playing = false; }); } }
+      document.body.appendChild(v);
+      playVideo();
+      // Retry the play a few times, since the first autoplay can be blocked
+      // until the page has fully settled.
+      var tries = 0;
+      var vt = setInterval(function () { if (playing || tries++ > 10) { clearInterval(vt); return; } playVideo(); }, 3000);
+    } catch (e) { /* video not supported; the nudge below still runs */ }
+
+    // 3. Invisible DOM nudge every 30 seconds
+    var nudge = document.createElement('div');
+    nudge.setAttribute('aria-hidden', 'true');
+    nudge.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    document.body.appendChild(nudge);
+    setInterval(function () { nudge.style.transform = 'translateZ(0) translateX(' + (Date.now() % 2) + 'px)'; }, 30 * 1000);
   }
 
   /* ================= Admin mode ================= */
