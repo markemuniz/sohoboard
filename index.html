@@ -161,6 +161,8 @@
     max-width: calc(100% - 32px);
   }
   .a-toast.bad { background: var(--a-danger); color: #1A0503; }
+  /* Emoji tiles: emoji glyphs sit smaller than capital letters, so bump them up. */
+  .t.e { font-size: calc(var(--fs, 20px) * 1.18) !important; }
 </style>
 </head>
 <body>
@@ -651,13 +653,35 @@
 
   /* ================= board text helpers ================= */
   var ALLOWED = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$()-+&=;:'\"%,./?";
+  // Emoji support: text is split into whole characters (graphemes) so an emoji,
+  // even one built from several code points like a flag or a skin tone, lands
+  // on a single tile. Anything else outside ALLOWED still becomes a blank tile.
+  var SEG = null;
+  try { if (typeof Intl !== 'undefined' && Intl.Segmenter) SEG = new Intl.Segmenter(); } catch (e) { SEG = null; }
+  var EMOJI_RE = null;
+  try { EMOJI_RE = new RegExp('\\p{Extended_Pictographic}|\\p{Regional_Indicator}', 'u'); } catch (e) { EMOJI_RE = /[\uD800-\uDBFF]/; }
+  function graphemes(s) {
+    s = String(s == null ? '' : s);
+    if (SEG) {
+      var a = [], it = SEG.segment(s)[Symbol.iterator](), n;
+      while (!(n = it.next()).done) a.push(n.value.segment);
+      return a;
+    }
+    return Array.from ? Array.from(s) : s.split('');
+  }
+  function isEmoji(g) { return g.length > 0 && EMOJI_RE.test(g); }
   function clean(s) {
     s = String(s == null ? '' : s);
     if (s.normalize) s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');
     s = s.toUpperCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
       .replace(/[–—]/g, '-').replace(/…/g, '...');
-    var out = [];
-    for (var i = 0; i < s.length; i++) out.push(ALLOWED.indexOf(s.charAt(i)) >= 0 ? s.charAt(i) : ' ');
+    var g = graphemes(s), out = [];
+    for (var i = 0; i < g.length; i++) {
+      var ch = g[i];
+      if (ch.length === 1 && ALLOWED.indexOf(ch) >= 0) out.push(ch);
+      else if (isEmoji(ch)) out.push(ch);
+      else out.push(' ');
+    }
     return out;
   }
   function blank() { var r = []; for (var i = 0; i < COLS; i++) r.push(' '); return r; }
@@ -691,14 +715,18 @@
     put(r, COLS - 1 - label.length, label);
     return r;
   }
+  function glen(s) { return clean(s).length; }
   function wrap(s, width) {
     var words = String(s || '').replace(/\s+/g, ' ').trim().split(' ');
     var lines = [], cur = '';
     words.forEach(function (w) {
       if (!w) return;
-      while (w.length > width) { if (cur) { lines.push(cur); cur = ''; } lines.push(w.slice(0, width)); w = w.slice(width); }
+      var g = clean(w);
+      while (g.length > width) { if (cur) { lines.push(cur); cur = ''; } lines.push(g.slice(0, width).join('')); g = g.slice(width); }
+      w = g.join('');
+      if (!w) return;
       if (!cur) cur = w;
-      else if ((cur + ' ' + w).length <= width) cur += ' ' + w;
+      else if (glen(cur) + 1 + g.length <= width) cur += ' ' + w;
       else { lines.push(cur); cur = w; }
     });
     if (cur) lines.push(cur);
@@ -708,7 +736,7 @@
     if (lines.length <= max) return lines;
     var out = lines.slice(0, max);
     var last = out[max - 1];
-    if (last.length > width - 3) last = last.slice(0, width - 3).replace(/\s+\S*$/, '');
+    if (glen(last) > width - 3) last = clean(last).slice(0, width - 3).join('').replace(/\s+\S*$/, '');
     out[max - 1] = last + '...';
     return out;
   }
@@ -1101,6 +1129,7 @@
         s.lineHeight = h + 'px';
         s.borderRadius = radius + 'px';
         s.setProperty('--seam-h', seam + 'px');
+        s.setProperty('--fs', fs + 'px');
       }
     }
     sizeBoard();
@@ -1112,7 +1141,7 @@
         el.className = 't c' + cell.charAt(1) + (flash ? ' f' : '');
         el.firstChild.nodeValue = '';
       } else {
-        el.className = flash ? 't f' : 't';
+        el.className = (flash ? 't f' : 't') + (/[^\x00-\x7F]/.test(cell) ? ' e' : '');
         el.firstChild.nodeValue = cell === ' ' ? '' : cell;
       }
     }
