@@ -165,7 +165,10 @@
   .t.e { font-size: calc(var(--fs, 20px) * 1.18) !important; }
   /* Photo tiles: each tile shows its own slice of a photo, so the picture flips in tile by tile. */
   .t.p { background-color: #111; background-repeat: no-repeat; }
-  .t.p::after { background: rgba(0, 0, 0, 0.35); }
+  .t.p::after { background: rgba(0, 0, 0, 0.18); }
+  .a-crop { margin-top: 12px; padding: 12px; border: 1px solid var(--a-line); border-radius: 10px; display: grid; grid-gap: 10px; justify-items: start; }
+  #cropCv { width: 280px; max-width: 100%; height: auto; border-radius: 8px; touch-action: none; cursor: grab; background: #000; }
+  #cropZoom { width: 280px; max-width: 100%; }
   .a-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; flex: none; }
 </style>
 </head>
@@ -1015,18 +1018,23 @@
     for (var i = 0; i < COLS; i++) r.push('{' + seq.charAt((i + shift) % seq.length) + '}');
     return r;
   }
+  // Photo card: the photo fills the left side, top to bottom (15 x 12 tiles), with the
+  // words on the right. Party cards get confetti above and below the words.
   function photoCard(key, lines, party) {
-    var BW = 10, BH = 8, C0 = 1, R0 = 2, r = [];
+    var BW = 15, BH = ROWS, r = [];
     for (var i = 0; i < ROWS; i++) r.push(blank());
-    for (var y = 0; y < BH; y++) for (var x = 0; x < BW; x++) r[R0 + y][C0 + x] = '\u0001' + key + '|' + x + '|' + y + '|' + BW + '|' + BH;
-    var tc = C0 + BW + 1, tw = COLS - tc - 1;
-    var start = Math.max(1, Math.floor((ROWS - lines.length) / 2));
-    lines.forEach(function (s, i) { var c = txt(s, tw); put(r[start + i], tc + Math.floor((tw - c.length) / 2), c); });
-    if (party) { r[0] = confetti(0); r[ROWS - 1] = confetti(5); }
+    for (var y = 0; y < BH; y++) for (var x = 0; x < BW; x++) r[y][x] = '\u0001' + key + '|' + x + '|' + y + '|' + BW + '|' + BH;
+    var tc = BW + 1, tw = COLS - tc - 1, L = [];
+    lines.forEach(function (s) { if (s) L.push.apply(L, wrap(s, tw)); else L.push(''); });
+    L = L.slice(0, ROWS - 2);
+    var start = Math.max(1, Math.floor((ROWS - L.length) / 2));
+    L.forEach(function (s, i) { var c = txt(s, tw); put(r[start + i], tc + Math.floor((tw - c.length) / 2), c); });
+    if (party) {
+      var top = confetti(0), bot = confetti(5);
+      for (var c = tc; c < COLS; c++) { r[0][c] = top[c]; r[ROWS - 1][c] = bot[c]; }
+    }
     return r;
   }
-  // Someone with a photo: today it's their card, otherwise every other round
-  // swaps the coming-up list for a card of whoever's next with a photo.
   function photoCelebrate(ev, cycle, upcoming) {
     var P = DATA.photos || {};
     var today = ev.filter(function (e) { return e.days === 0; });
@@ -1042,9 +1050,10 @@
     var up = ev.filter(function (x) { return x.key && P[x.key]; });
     if (!upcoming || !up.length) return null;
     e = up[cycle % up.length];
-    return photoCard(e.key, ['COMING UP', '', e.name, '',
-      e.kind === 'bday' ? 'BIRTHDAY' : e.years + (e.years === 1 ? ' YEAR' : ' YEARS') + ' AT TTA',
-      e.days === 1 ? 'TOMORROW' : shortMD(e.date)], false);
+    var when = e.days === 1 ? 'TOMORROW' : shortMD(e.date);
+    return photoCard(e.key, e.kind === 'bday'
+      ? ['COMING UP', '', e.name, '', 'BIRTHDAY', when]
+      : ['COMING UP', '', e.name, '', e.years + (e.years === 1 ? ' YEAR' : ' YEARS'), 'AT TTA', when], false);
   }
   // Its own slot right after the birthday list: a photo card for whoever's coming up.
   function celebPhotoPanel(cycle) {
@@ -1813,10 +1822,72 @@
       var file = inp.files[0];
       inp.value = '';
       toast('Saving photo…');
-      photoToDataUrl(file).then(function (data) { return rootRef.child('photos/' + k).set(data); })
-        .then(function () { toast('Photo saved.'); })
-        .catch(function (err) { toast(err && err.message ? err.message : failText(err), true); });
+      openCropper(k, file);
     });
+    // Crop step: drag to move, slider to zoom, so the face fills the square the board shows.
+    function openCropper(k, file) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () {
+        var box = $('photoCrop');
+        if (!box) { box = document.createElement('div'); box.id = 'photoCrop'; $('teamList').insertAdjacentElement('afterend', box); }
+        var who = ((DATA.team || {})[k] || {}).name || 'their';
+        box.innerHTML = '<div class="a-crop"><p class="a-hint" style="margin:0">Drag the photo and zoom in so ' + esc(who) + "'s face fills most of the square. The lines show the board's tiles.</p>" +
+          '<canvas id="cropCv" width="560" height="560"></canvas>' +
+          '<label for="cropZoom" class="a-hint" style="margin:0">Zoom</label><input id="cropZoom" type="range" min="1" max="6" step="0.01" value="1">' +
+          '<div class="a-row"><button class="a-btn primary" type="button" id="cropSave">Save photo</button><button class="a-btn" type="button" id="cropCancel">Cancel</button></div></div>';
+        box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        var cv = $('cropCv'), V = cv.width, W = img.naturalWidth, H = img.naturalHeight;
+        var base = Math.max(V / W, V / H), zoom = 1, cx = W / 2, cy = H * 0.4, drag = null;
+        function clamp() {
+          var half = V / 2 / (base * zoom);
+          cx = Math.min(Math.max(cx, half), W - half);
+          cy = Math.min(Math.max(cy, half), H - half);
+        }
+        function paint(c, size) {
+          var g = c.getContext('2d'), sc = base * zoom * size / V;
+          g.fillStyle = '#000'; g.fillRect(0, 0, size, size);
+          try { g.filter = 'brightness(1.06) contrast(1.08) saturate(1.1)'; } catch (e) { }
+          g.drawImage(img, size / 2 - cx * sc, size / 2 - cy * sc, W * sc, H * sc);
+          try { g.filter = 'none'; } catch (e) { }
+        }
+        function render() {
+          clamp(); paint(cv, V);
+          var g = cv.getContext('2d');
+          g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 2;
+          for (var i = 1; i < 15; i++) { var x = Math.round(i * V / 15); g.beginPath(); g.moveTo(x, 0); g.lineTo(x, V); g.stroke(); }
+          for (var j = 1; j < 12; j++) { var y = Math.round(j * V / 12); g.beginPath(); g.moveTo(0, y); g.lineTo(V, y); g.stroke(); }
+        }
+        render();
+        cv.addEventListener('pointerdown', function (e) { drag = { x: e.clientX, y: e.clientY, cx: cx, cy: cy }; try { cv.setPointerCapture(e.pointerId); } catch (er) { } });
+        cv.addEventListener('pointermove', function (e) {
+          if (!drag) return;
+          var k2 = V / cv.clientWidth / (base * zoom);
+          cx = drag.cx - (e.clientX - drag.x) * k2;
+          cy = drag.cy - (e.clientY - drag.y) * k2;
+          render();
+        });
+        function endDrag() { drag = null; }
+        cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+        cv.addEventListener('wheel', function (e) {
+          e.preventDefault();
+          zoom = Math.min(6, Math.max(1, zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+          $('cropZoom').value = zoom; render();
+        }, { passive: false });
+        $('cropZoom').addEventListener('input', function () { zoom = +this.value; render(); });
+        function close() { box.innerHTML = ''; URL.revokeObjectURL(url); }
+        $('cropCancel').addEventListener('click', close);
+        $('cropSave').addEventListener('click', function () {
+          var out = document.createElement('canvas'); out.width = out.height = 480;
+          clamp(); paint(out, 480);
+          var data = out.toDataURL('image/jpeg', 0.85);
+          toast('Saving photo…');
+          rootRef.child('photos/' + k).set(data).then(function () { toast('Photo saved.'); close(); })
+            .catch(function (err) { toast(failText(err), true); });
+        });
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); toast("Couldn't read that photo. Try a JPG or PNG.", true); };
+      img.src = url;
+    }
     $('teamList').addEventListener('click', function (ev) {
       var b = ev.target.closest && ev.target.closest('[data-unphoto]');
       if (!b) return;
