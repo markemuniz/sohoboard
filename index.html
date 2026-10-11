@@ -2409,5 +2409,65 @@
   if (isAdmin) startAdmin(); else startTV();
 })();
 </script>
+<style>
+  /* Collapsible admin sections */
+  .a-card > h2.a-fold { cursor: pointer; user-select: none; -webkit-user-select: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .a-card > h2.a-fold:hover { color: var(--a-ink); }
+  .a-card > h2.a-fold:focus-visible { outline: 2px solid currentColor; outline-offset: 4px; border-radius: 4px; }
+  .a-card > h2.a-fold::after { content: ''; flex: none; width: 8px; height: 8px; margin-right: 4px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: translateY(-2px) rotate(45deg); transition: transform .15s ease; }
+  .a-card.a-folded > h2.a-fold::after { transform: rotate(-45deg); }
+  .a-card.a-folded > :not(h2) { display: none !important; }
+  .a-foldbar { display: flex; justify-content: flex-end; gap: 8px; }
+</style>
+<script>
+(function () {
+  var KEY = 'sohoAdminFolded';
+  var OPEN_BY_DEFAULT = { 'Upload Dutchie report': true };
+  var saved = null;
+  try { saved = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { saved = null; }
+  var state = saved || {};
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  var cards = [];
+  Array.prototype.forEach.call(document.querySelectorAll('section.a-card'), function (card) {
+    var h = card.firstElementChild;
+    if (!h || h.tagName !== 'H2') return;
+    var name = (h.textContent || '').trim();
+    if (!name || name === 'Enter PIN') return;
+    var key = h.id || name;
+    h.classList.add('a-fold');
+    h.setAttribute('role', 'button');
+    h.setAttribute('tabindex', '0');
+    function set(folded, remember) {
+      card.classList.toggle('a-folded', folded);
+      h.setAttribute('aria-expanded', folded ? 'false' : 'true');
+      if (remember) { state[key] = folded; save(); }
+    }
+    var folded = (key in state) ? !!state[key] : !OPEN_BY_DEFAULT[name];
+    set(folded, false);
+    function toggle() { set(!card.classList.contains('a-folded'), true); }
+    h.addEventListener('click', toggle);
+    h.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+    });
+    cards.push({ set: set });
+  });
+
+  if (cards.length) {
+    var first = document.querySelector('section.a-card > h2.a-fold').parentNode;
+    var bar = document.createElement('div');
+    bar.className = 'a-foldbar';
+    bar.innerHTML = '<button type="button" class="a-btn small" data-fold="0">Expand all</button>' +
+                    '<button type="button" class="a-btn small" data-fold="1">Collapse all</button>';
+    bar.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-fold]');
+      if (!b) return;
+      var f = b.getAttribute('data-fold') === '1';
+      cards.forEach(function (c) { c.set(f, true); });
+    });
+    first.parentNode.insertBefore(bar, first);
+  }
+})();
+</script>
 </body>
 </html>
