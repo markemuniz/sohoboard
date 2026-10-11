@@ -622,7 +622,9 @@
     ['weather', 'SoHo weather'],
     ['records', 'Record board'],
     ['countdown', 'Green Wednesday countdown'],
-    ['pet', 'Pet of the month']
+    ['pet', 'Pet of the month'],
+    ['onthisday', 'On this day'],
+    ['nycfact', 'NYC fact']
   ];
   function panelOn(name) {
     var key = (name === 'trivQ' || name === 'trivA') ? 'trivia' : (name === 'celebPhoto' ? 'celebrate' : name);
@@ -1278,7 +1280,7 @@
     var l = triviaList();
     if (!l.length) return null;
     var dn = Math.floor(parseYmd(todayStr()).getTime() / 86400000);
-    return l[(dn * 5 + cycle) % l.length];
+    return l[(dn * 173 + cycle) % l.length];
   }
   function triviaQPanel(cycle) {
     var t = triviaPick(cycle);
@@ -1306,7 +1308,82 @@
     return framed(r);
   }
 
-  var ORDER = ['welcome', 'weather', 'home', 'records', 'mis', 'uptDay', 'trivQ', 'stars', 'countdown', 'spotlight', 'atvDay', 'trivA', 'pet', 'quote', 'celebrate', 'celebPhoto', 'uptMonth', 'shout', 'atvMonth', 'message'];
+  /* ---- extra content (On This Day + NYC facts) ---- */
+  var CONTENT = null, contentLoadedAt = 0, contentLoading = false;
+  function loadContent() {
+    if (contentLoading) return;
+    if (CONTENT && Date.now() - contentLoadedAt < 6 * 3600 * 1000) return;
+    contentLoading = true;
+    firebase.database().ref('sohoBoardContent').once('value').then(function (snap) {
+      CONTENT = snap.val() || {};
+      contentLoadedAt = Date.now();
+      contentLoading = false;
+    }).catch(function () { contentLoading = false; });
+  }
+  loadContent();
+
+  var MONTH_NAMES = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
+  function onThisDayPanel(cycle) {
+    loadContent();
+    if (!CONTENT || !CONTENT.onThisDay) return null;
+    var d = parseYmd(todayStr());
+    var mm = d.getMonth() + 1, dd = d.getDate();
+    var key = (mm < 10 ? '0' : '') + mm + '-' + (dd < 10 ? '0' : '') + dd;
+    var list = CONTENT.onThisDay[key];
+    if (!list) return null;
+    if (!Array.isArray(list)) list = Object.keys(list).map(function (k) { return list[k]; });
+    if (!list.length) return null;
+    var e = list[cycle % list.length];
+    var head = center('ON THIS DAY: ' + MONTH_NAMES[mm - 1] + ' ' + dd);
+    head[0] = '{O}'; head[COLS - 1] = '{O}';
+    var r = [head, blank(), center(String(e.y)), blank()];
+    var lines = fitLines(wrap(e.t, COLS - 2), 6, COLS - 2).map(center);
+    r = r.concat(middle(lines, 4, 10));
+    while (r.length < ROWS - 1) r.push(blank());
+    r = r.slice(0, ROWS - 1);
+    r.push(edges('O'));
+    return framed(r);
+  }
+
+  /* NYC facts never repeat until the whole list has been shown. Position is saved
+     on the TV (localStorage), and each full pass uses a new shuffled order. */
+  var nycFactAt = 0, nycFactText = null, nycFactNum = 0;
+  function nycShuffled(n, seed) {
+    var a = [], i;
+    for (i = 0; i < n; i++) a.push(i);
+    var s = (seed * 2654435761) >>> 0;
+    function rnd() { s = (s + 0x6D2B79F5) >>> 0; var t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+    for (i = n - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)); var tmp = a[i]; a[i] = a[j]; a[j] = tmp; }
+    return a;
+  }
+  function nycFactPanel(cycle) {
+    loadContent();
+    if (!CONTENT || !CONTENT.nycFacts) return null;
+    var L = CONTENT.nycFacts;
+    if (!Array.isArray(L)) L = Object.keys(L).map(function (k) { return L[k]; });
+    if (!L.length) return null;
+    var slotMs = Math.max(6, Math.min(90, num(S().rotateSecs, 15))) * 1000;
+    if (!nycFactText || Date.now() - nycFactAt > slotMs) {
+      var n = 0;
+      try { n = parseInt(localStorage.getItem('sohoNycFactN') || '0', 10) || 0; } catch (e) { n = Math.floor(Date.now() / 240000); }
+      var pass = Math.floor(n / L.length), pos = n % L.length;
+      nycFactText = L[nycShuffled(L.length, pass + 1)[pos]];
+      nycFactNum = pos + 1;
+      try { localStorage.setItem('sohoNycFactN', String(n + 1)); } catch (e) {}
+      nycFactAt = Date.now();
+    }
+    var head = center('NEW YORK FACT #' + nycFactNum);
+    head[0] = '{V}'; head[COLS - 1] = '{V}';
+    var lines = fitLines(wrap(nycFactText, COLS - 2), 8, COLS - 2).map(center);
+    var r = [head, blank()].concat(middle(lines, 2, 10));
+    while (r.length < ROWS - 1) r.push(blank());
+    r = r.slice(0, ROWS - 1);
+    r.push(edges('V'));
+    return framed(r);
+  }
+
+  var ORDER = ['welcome', 'weather', 'onthisday', 'home', 'records', 'mis', 'uptDay', 'trivQ', 'stars', 'countdown', 'nycfact', 'spotlight', 'atvDay', 'trivA', 'pet', 'quote', 'celebrate', 'celebPhoto', 'uptMonth', 'nycfact', 'shout', 'atvMonth', 'message'];
   function build(name, cycle) {
     if (!panelOn(name)) return null;
     switch (name) {
@@ -1329,6 +1406,8 @@
       case 'pet': return petPanel(cycle);
       case 'weather': return weatherPanel();
       case 'trivQ': return triviaQPanel(cycle);
+      case 'onthisday': return onThisDayPanel(cycle);
+      case 'nycfact': return nycFactPanel(cycle);
       case 'trivA': return triviaAPanel(cycle);
     }
     return null;
