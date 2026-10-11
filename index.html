@@ -1240,7 +1240,11 @@
   // Its own slot right after the birthday list: one photo card per loop, taking turns
   // through everyone with a photo (soonest day first), however far off their day is.
   function celebPhotoPanel(cycle) {
-    var ev = celebrations(366);
+    var ev = celebrations(366).filter(function (e) {
+      /* anniversaries only when they're coming up soon; otherwise a new hire
+         shows '1 YEAR AT TTA' for a date a whole year away */
+      return e.kind === 'bday' || e.days <= 21;
+    });
     return ev.length ? photoCelebrate(ev, cycle || 0, true) : null;
   }
   function celebratePanel(cycle) {
