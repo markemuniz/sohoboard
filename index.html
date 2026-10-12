@@ -381,6 +381,32 @@
       </section>
 
       <section class="a-card">
+        <h2>Birthday celebration</h2>
+        <p class="a-hint">Celebrate someone on their birthday: their photo framed in cannabis leaves with your message. It only shows on the date you pick, and it comes up more often than the other pages that day.</p>
+        <form id="bdcForm" class="a-grid2">
+          <div class="a-field">
+            <label for="bdcName">Name</label>
+            <input id="bdcName" type="text" maxlength="22" required placeholder="Skye">
+          </div>
+          <div class="a-field">
+            <label for="bdcDate">Date</label>
+            <input id="bdcDate" type="date" required>
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="bdcMsg">Birthday message (short is best)</label>
+            <textarea id="bdcMsg" maxlength="70" placeholder="Have the best day! The whole SoHo team loves you"></textarea>
+          </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="bdcPhoto">Photo</label>
+            <input id="bdcPhoto" type="file" accept="image/*" required>
+          </div>
+          <div class="a-row"><button class="a-btn primary" type="submit">Next: crop the photo</button></div>
+        </form>
+        <div id="bdcCrop"></div>
+        <div class="a-list" id="bdcList"></div>
+      </section>
+
+      <section class="a-card">
         <h2>Pet of the month</h2>
         <p class="a-hint">Add a team pet's name and photo, then crop it so the pet fills the square. If there's more than one pet, the board takes turns.</p>
         <form id="petForm" class="a-grid2">
@@ -628,6 +654,7 @@
     ['records', 'Record board'],
     ['countdown', 'Green Wednesday countdown'],
     ['pet', 'Pet of the month'],
+    ['bdayToday', 'Birthday celebration'],
     ['onthisday', 'On this day'],
     ['nycfact', 'NYC fact']
   ];
@@ -1128,6 +1155,7 @@
   // Photo cells name their picture: a team member's key, or "pet:<id>".
   function photoSrc(key) {
     if (String(key).indexOf('pet:') === 0) { var pp = (DATA.pets || {})[key.slice(4)]; return pp && pp.photo; }
+    if (String(key).indexOf('bday:') === 0) { var bc = (DATA.bdayCelebs || {})[key.slice(5)]; return bc && bc.photo; }
     if (String(key).indexOf('spot:') === 0) { var sp = (DATA.spotlights || {})[key.slice(5)]; return sp && sp.photo; }
     return (DATA.photos || {})[key];
   }
@@ -1202,6 +1230,38 @@
     r.push(center(n === 1 ? 'TOMORROW! GET READY!' : '2ND BIGGEST DAY OF THE YEAR'));
     r.push(G);
     return framed(r);
+  }
+
+  // Birthday celebration: the photo inside a ring of cannabis leaves, with the
+  // message on the right between rows of leaves. Only shows on its date.
+  function bdayCelebsToday() {
+    var B = DATA.bdayCelebs || {}, t = todayStr();
+    return Object.keys(B).filter(function (k) { return B[k] && B[k].photo && B[k].name && B[k].date === t; })
+      .sort(function (a, b) { return (B[a].addedAt || 0) - (B[b].addedAt || 0); });
+  }
+  function bdayTodayPanel(cycle) {
+    var ids = bdayCelebsToday();
+    if (!ids.length) return null;
+    var id = ids[cycle % ids.length], p = DATA.bdayCelebs[id], key = 'bday:' + id;
+    var FW = 15, FH = ROWS, r = [], x, y, i;
+    for (i = 0; i < ROWS; i++) r.push(blank());
+    for (x = 0; x < FW; x++) { r[0][x] = '🌿'; r[FH - 1][x] = '🌿'; }
+    for (y = 1; y < FH - 1; y++) { r[y][0] = '🌿'; r[y][FW - 1] = '🌿'; }
+    var BW = FW - 2, BH = FH - 2;
+    for (y = 0; y < BH; y++) for (x = 0; x < BW; x++) r[y + 1][x + 1] = '\u0001' + key + '|' + x + '|' + y + '|' + BW + '|' + BH;
+    var tc = FW + 1, tw = COLS - tc - 1;
+    for (x = tc - 1; x < COLS; x++) {
+      var on = (x - tc + 1 + cycle) % 2 === 0;
+      r[0][x] = on ? '🌿' : '{G}';
+      r[ROWS - 1][x] = on ? '{G}' : '🌿';
+    }
+    var L = ['HAPPY', 'BIRTHDAY', ''].concat(fitLines(wrap(p.name, tw), 2, tw));
+    var msg = String(p.msg || '').trim();
+    if (msg) L = L.concat([''], fitLines(wrap(msg, tw), Math.max(1, ROWS - 3 - L.length), tw));
+    L = L.slice(0, ROWS - 2);
+    var start = 1 + Math.floor((ROWS - 2 - L.length) / 2);
+    L.forEach(function (s, n) { var c = txt(s, tw); put(r[start + n], tc + Math.floor((tw - c.length) / 2), c); });
+    return r;
   }
 
   // Pet of the month: the photo in a rainbow tile frame with paw prints in the corners.
@@ -1424,7 +1484,7 @@
     return framed(r);
   }
 
-  var ORDER = ['welcome', 'weather', 'onthisday', 'home', 'records', 'mis', 'uptDay', 'trivQ', 'stars', 'countdown', 'nycfact', 'spotlight', 'atvDay', 'trivA', 'pet', 'quote', 'celebrate', 'celebPhoto', 'uptMonth', 'nycfact', 'shout', 'atvMonth', 'message'];
+  var ORDER = ['bdayToday', 'welcome', 'weather', 'onthisday', 'home', 'records', 'mis', 'uptDay', 'trivQ', 'stars', 'countdown', 'bdayToday', 'nycfact', 'spotlight', 'atvDay', 'trivA', 'pet', 'quote', 'celebrate', 'celebPhoto', 'bdayToday', 'uptMonth', 'nycfact', 'shout', 'atvMonth', 'bdayToday', 'message'];
   function build(name, cycle) {
     if (!panelOn(name)) return null;
     switch (name) {
@@ -1445,6 +1505,7 @@
       case 'records': return recordsPanel();
       case 'countdown': return countdownPanel();
       case 'pet': return petPanel(cycle);
+      case 'bdayToday': return bdayTodayPanel(cycle);
       case 'weather': return weatherPanel();
       case 'trivQ': return triviaQPanel(cycle);
       case 'onthisday': return onThisDayPanel(cycle);
@@ -1954,6 +2015,17 @@
       // Team birthdays and anniversaries
       var tm = Object.keys(DATA.team || {}).map(function (k) { var x = DATA.team[k]; x._k = k; return x; })
         .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+      // Birthday celebrations (newest date first)
+      var bcs = Object.keys(DATA.bdayCelebs || {}).map(function (k) { var x = DATA.bdayCelebs[k]; x._k = k; return x; })
+        .sort(function (a, b) { return String(b.date || '').localeCompare(String(a.date || '')); });
+      var tdy = todayStr();
+      $('bdcList').innerHTML = bcs.length ? bcs.map(function (x) {
+        var when = x.date === tdy ? 'Today, showing now' : (String(x.date) < tdy ? x.date + ' (past)' : x.date);
+        return '<div class="a-item">' + (x.photo ? '<img class="a-thumb" alt="" src="' + esc(x.photo) + '">' : '') +
+          '<div class="grow"><div class="name">' + esc(x.name) + '</div><div class="sub">' + esc(when) + (x.msg ? '<br>' + esc(x.msg) : '') + '</div></div>' +
+          '<button class="a-btn small danger" type="button" data-del="bdayCelebs/' + esc(x._k) + '">Delete</button></div>';
+      }).join('') : '<p class="a-empty">No birthday celebrations yet.</p>';
+
       // Pets
       var pets = Object.keys(DATA.pets || {}).map(function (k) { var x = DATA.pets[k]; x._k = k; return x; })
         .sort(function (a, b) { return (a.addedAt || 0) - (b.addedAt || 0); });
@@ -2219,7 +2291,7 @@
       opts = opts || {};
       var url = URL.createObjectURL(file), img = new Image();
       img.onload = function () {
-        ['photoCrop', 'petCrop', 'spotCrop'].forEach(function (id) { var ob = $(id); if (ob) ob.innerHTML = ''; });
+        ['photoCrop', 'petCrop', 'spotCrop', 'bdcCrop'].forEach(function (id) { var ob = $(id); if (ob) ob.innerHTML = ''; });
         var box = $(opts.boxId || 'photoCrop');
         if (!box) { box = document.createElement('div'); box.id = 'photoCrop'; $('teamList').insertAdjacentElement('afterend', box); }
         var who = opts.who || ((DATA.team || {})[k] || {}).name || 'their';
@@ -2298,6 +2370,19 @@
       rootRef.child('photos/' + b.getAttribute('data-unphoto')).remove()
         .then(function () { toast('Photo removed.'); })
         .catch(function (err) { toast(failText(err), true); });
+    });
+
+    $('bdcDate').value = todayStr();
+    $('bdcForm').addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var name = $('bdcName').value.trim(), date = $('bdcDate').value, msg = $('bdcMsg').value.trim();
+      var f = $('bdcPhoto').files && $('bdcPhoto').files[0];
+      if (!name || !date || !f) { toast('Add a name, date and photo.', true); return; }
+      openCropper('bday', f, { who: name, boxId: 'bdcCrop', grid: [13, 10], save: function (data) {
+        return rootRef.child('bdayCelebs').push({ name: name, date: date, msg: msg, photo: data, addedAt: Date.now() }).then(function () {
+          $('bdcName').value = ''; $('bdcMsg').value = ''; $('bdcPhoto').value = ''; $('bdcDate').value = todayStr();
+        });
+      } });
     });
 
     $('petForm').addEventListener('submit', function (ev) {
