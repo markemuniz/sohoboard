@@ -346,8 +346,13 @@
             <label for="spotPoints">Talking points (one per line, up to 3)</label>
             <textarea id="spotPoints" maxlength="150" placeholder="Our #1 Wyld flavor last month&#10;2:1 THC to CBN&#10;Real fruit, vegan"></textarea>
           </div>
+          <div class="a-field" style="grid-column:1/-1">
+            <label for="spotPhoto">Product photo (optional)</label>
+            <input id="spotPhoto" type="file" accept="image/*">
+          </div>
           <div class="a-row"><button class="a-btn primary" type="submit">Add spotlight</button></div>
         </form>
+        <div id="spotCrop"></div>
         <div class="a-list" id="spotList"></div>
       </section>
 
@@ -1024,10 +1029,14 @@
   }
 
   function spotlightPanel(cycle) {
-    var list = vals(DATA.spotlights).filter(function (x) { return x && x.product; }).sort(byNewest).slice(0, 10);
+    var S = DATA.spotlights || {};
+    var list = Object.keys(S).filter(function (k) { return S[k] && S[k].product; })
+      .map(function (k) { return { k: k, v: S[k] }; })
+      .sort(function (a, b) { return byNewest(a.v, b.v); }).slice(0, 10);
     if (!list.length) return null;
-    var p = list[cycle % list.length];
+    var pick = list[cycle % list.length], p = pick.v;
     var head = center('PRODUCT SPOTLIGHT'); head[0] = '{O}'; head[COLS - 1] = '{O}';
+    if (p.photo) return spotlightPhotoPanel(pick.k, p, head);
     var r = [head, blank()];
     fitLines(wrap(p.product, COLS - 2), 2, COLS - 2).forEach(function (l) { r.push(center(l)); });
     var price = String(p.price || '').trim();
@@ -1043,6 +1052,33 @@
     while (r.length < ROWS - 1) r.push(blank());
     r = r.slice(0, ROWS - 1);
     r.push(center('🌿 RECOMMEND IT TODAY 🌿'));
+    return framed(r);
+  }
+
+  // Spotlight with a product photo: a small photo block on the left under the header,
+  // product / brand / price beside it, talking points full width underneath.
+  function spotlightPhotoPanel(id, p, head) {
+    var BW = 8, BH = 6, PX = 1, PY = 1, r = [head], x, y;
+    for (var i = 1; i < ROWS; i++) r.push(blank());
+    var key = 'spot:' + id;
+    for (y = 0; y < BH; y++) for (x = 0; x < BW; x++) r[PY + y][PX + x] = '\u0001' + key + '|' + x + '|' + y + '|' + BW + '|' + BH;
+    var tc = PX + BW + 1, tw = COLS - tc - 1, L = [];
+    var price = String(p.price || '').trim();
+    if (price && /^[0-9.]+$/.test(price)) price = '$' + price;
+    L = L.concat(fitLines(wrap(p.product, tw), 3, tw));
+    if (p.brand || price) L.push('');
+    if (p.brand) L = L.concat(fitLines(wrap(p.brand, tw), 1, tw));
+    if (price) L.push(price);
+    L = L.slice(0, BH);
+    var start = PY + Math.floor((BH - L.length) / 2);
+    L.forEach(function (s, i) { var c = txt(s, tw); put(r[start + i], tc + Math.floor((tw - c.length) / 2), c); });
+    var lines = [];
+    String(p.points || '').split(/\n/).map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 3).forEach(function (pt) {
+      wrap(pt, COLS - 4).forEach(function (l, i) { lines.push((i === 0 ? '- ' : '  ') + l); });
+    });
+    var top = PY + BH, room = ROWS - 1 - top;
+    lines.slice(0, room).forEach(function (l, i) { put(r[top + i], 1, txt(l, COLS - 2)); });
+    r[ROWS - 1] = center('🌿 RECOMMEND IT TODAY 🌿');
     return framed(r);
   }
 
@@ -1092,6 +1128,7 @@
   // Photo cells name their picture: a team member's key, or "pet:<id>".
   function photoSrc(key) {
     if (String(key).indexOf('pet:') === 0) { var pp = (DATA.pets || {})[key.slice(4)]; return pp && pp.photo; }
+    if (String(key).indexOf('spot:') === 0) { var sp = (DATA.spotlights || {})[key.slice(5)]; return sp && sp.photo; }
     return (DATA.photos || {})[key];
   }
 
@@ -1905,8 +1942,11 @@
       var sp = Object.keys(DATA.spotlights || {}).map(function (k) { var x = DATA.spotlights[k]; x._k = k; return x; }).sort(byNewest);
       $('spotList').innerHTML = sp.length ? sp.map(function (x, i) {
         var pts = String(x.points || '').split(/\n/).filter(function (l) { return l.trim(); }).join(' · ');
-        return '<div class="a-item"><div class="grow"><div class="name">' + esc(x.product) + (i < 10 ? '' : ' <span class="sub">(not shown, only the newest 10 rotate)</span>') + '</div><div class="sub">' +
+        return '<div class="a-item">' + (x.photo ? '<img class="a-thumb" alt="" src="' + esc(x.photo) + '">' : '') +
+          '<div class="grow"><div class="name">' + esc(x.product) + (i < 10 ? '' : ' <span class="sub">(not shown, only the newest 10 rotate)</span>') + '</div><div class="sub">' +
           esc([x.brand, x.price].filter(Boolean).join(' · ')) + (pts ? '<br>' + esc(pts) : '') + '</div></div>' +
+          '<label class="a-btn small">' + (x.photo ? 'Change photo' : 'Add photo') + '<input type="file" accept="image/*" data-spotphoto="' + esc(x._k) + '" hidden></label>' +
+          (x.photo ? '<button class="a-btn small" type="button" data-spotunphoto="' + esc(x._k) + '">Remove photo</button>' : '') +
           '<button class="a-btn small danger" type="button" data-del="spotlights/' + esc(x._k) + '">Delete</button></div>';
       }).join('') : '<p class="a-empty">No spotlight yet.</p>';
 
@@ -2060,14 +2100,42 @@
       ev.preventDefault();
       var product = $('spotProduct').value.trim();
       if (!product) return;
-      rootRef.child('spotlights').push({
+      var rec = {
         product: product, brand: $('spotBrand').value.trim(), price: $('spotPrice').value.trim(),
-        points: $('spotPoints').value.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 3).join('\n'),
-        addedAt: Date.now()
-      }).then(function () {
-        ['spotProduct', 'spotBrand', 'spotPrice', 'spotPoints'].forEach(function (id) { $(id).value = ''; });
-        toast('Spotlight added.');
-      }).catch(function (err) { toast(failText(err), true); });
+        points: $('spotPoints').value.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 3).join('\n')
+      };
+      function saveSpot(photo) {
+        rec.addedAt = Date.now();
+        if (photo) rec.photo = photo;
+        return rootRef.child('spotlights').push(rec).then(function () {
+          ['spotProduct', 'spotBrand', 'spotPrice', 'spotPoints', 'spotPhoto'].forEach(function (id) { $(id).value = ''; });
+          toast('Spotlight added.');
+        });
+      }
+      var f = $('spotPhoto').files && $('spotPhoto').files[0];
+      if (f) openCropper('spot', f, spotCropOpts(product, saveSpot));
+      else saveSpot().catch(function (err) { toast(failText(err), true); });
+    });
+    // Product photos: whole product fits by default (zoom out allowed), small block on the board.
+    function spotCropOpts(product, save) {
+      return { who: product, boxId: 'spotCrop', grid: [8, 6], fit: true, save: save,
+        hint: 'Drag and zoom so the product fills the square. The lines show the board tiles.' };
+    }
+    $('spotList').addEventListener('change', function (ev) {
+      var inp = ev.target, k = inp.getAttribute && inp.getAttribute('data-spotphoto');
+      if (!k || !inp.files || !inp.files[0]) return;
+      var file = inp.files[0], sp = (DATA.spotlights || {})[k] || {};
+      inp.value = '';
+      openCropper('spot', file, spotCropOpts(sp.product || 'the product', function (data) {
+        return rootRef.child('spotlights/' + k + '/photo').set(data);
+      }));
+    });
+    $('spotList').addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-spotunphoto]');
+      if (!b) return;
+      rootRef.child('spotlights/' + b.getAttribute('data-spotunphoto') + '/photo').remove()
+        .then(function () { toast('Photo removed.'); })
+        .catch(function (err) { toast(failText(err), true); });
     });
 
     (function buildBdaySelects() {
@@ -2121,26 +2189,37 @@
       opts = opts || {};
       var url = URL.createObjectURL(file), img = new Image();
       img.onload = function () {
-        ['photoCrop', 'petCrop'].forEach(function (id) { var ob = $(id); if (ob) ob.innerHTML = ''; });
+        ['photoCrop', 'petCrop', 'spotCrop'].forEach(function (id) { var ob = $(id); if (ob) ob.innerHTML = ''; });
         var box = $(opts.boxId || 'photoCrop');
         if (!box) { box = document.createElement('div'); box.id = 'photoCrop'; $('teamList').insertAdjacentElement('afterend', box); }
         var who = opts.who || ((DATA.team || {})[k] || {}).name || 'their';
         var GX = (opts.grid || [15, 12])[0], GY = (opts.grid || [15, 12])[1];
-        box.innerHTML = '<div class="a-crop"><p class="a-hint" style="margin:0">Drag the photo and zoom in so ' + esc(who) + "'s face fills most of the square. The lines show the board's tiles.</p>" +
+        var hint = opts.hint ? esc(opts.hint) : 'Drag the photo and zoom in so ' + esc(who) + "'s face fills most of the square. The lines show the board's tiles.";
+        var minZ = opts.fit ? Math.min(img.naturalWidth, img.naturalHeight) / Math.max(img.naturalWidth, img.naturalHeight) : 1;
+        box.innerHTML = '<div class="a-crop"><p class="a-hint" style="margin:0">' + hint + '</p>' +
           '<canvas id="cropCv" width="560" height="560"></canvas>' +
-          '<label for="cropZoom" class="a-hint" style="margin:0">Zoom</label><input id="cropZoom" type="range" min="1" max="6" step="0.01" value="1">' +
+          '<label for="cropZoom" class="a-hint" style="margin:0">Zoom</label><input id="cropZoom" type="range" min="' + minZ + '" max="6" step="0.01" value="' + minZ + '">' +
           '<div class="a-row"><button class="a-btn primary" type="button" id="cropSave">Save photo</button><button class="a-btn" type="button" id="cropCancel">Cancel</button></div></div>';
         box.scrollIntoView({ behavior: 'smooth', block: 'center' });
         var cv = $('cropCv'), V = cv.width, W = img.naturalWidth, H = img.naturalHeight;
-        var base = Math.max(V / W, V / H), zoom = 1, cx = W / 2, cy = H * 0.4, drag = null;
+        var base = Math.max(V / W, V / H), zoom = minZ, cx = W / 2, cy = opts.fit ? H / 2 : H * 0.4, drag = null;
+        // Fit mode: fill the empty edges with the photo's own corner color (usually white).
+        var bg = '#000';
+        if (opts.fit) {
+          try {
+            var sc0 = document.createElement('canvas'); sc0.width = sc0.height = 1;
+            var g0 = sc0.getContext('2d'); g0.drawImage(img, 0, 0, Math.max(1, W * 0.02), Math.max(1, H * 0.02), 0, 0, 1, 1);
+            var px = g0.getImageData(0, 0, 1, 1).data; bg = 'rgb(' + px[0] + ',' + px[1] + ',' + px[2] + ')';
+          } catch (e) { bg = '#fff'; }
+        }
         function clamp() {
           var half = V / 2 / (base * zoom);
-          cx = Math.min(Math.max(cx, half), W - half);
-          cy = Math.min(Math.max(cy, half), H - half);
+          cx = W / 2 <= half ? W / 2 : Math.min(Math.max(cx, half), W - half);
+          cy = H / 2 <= half ? H / 2 : Math.min(Math.max(cy, half), H - half);
         }
         function paint(c, size) {
           var g = c.getContext('2d'), sc = base * zoom * size / V;
-          g.fillStyle = '#000'; g.fillRect(0, 0, size, size);
+          g.fillStyle = bg; g.fillRect(0, 0, size, size);
           try { g.filter = 'brightness(1.06) contrast(1.08) saturate(1.1)'; } catch (e) { }
           g.drawImage(img, size / 2 - cx * sc, size / 2 - cy * sc, W * sc, H * sc);
           try { g.filter = 'none'; } catch (e) { }
@@ -2165,7 +2244,7 @@
         cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
         cv.addEventListener('wheel', function (e) {
           e.preventDefault();
-          zoom = Math.min(6, Math.max(1, zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
+          zoom = Math.min(6, Math.max(minZ, zoom * (e.deltaY < 0 ? 1.08 : 1 / 1.08)));
           $('cropZoom').value = zoom; render();
         }, { passive: false });
         $('cropZoom').addEventListener('input', function () { zoom = +this.value; render(); });
