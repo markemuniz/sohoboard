@@ -350,7 +350,7 @@
             <label for="spotPhoto">Product photo (optional)</label>
             <input id="spotPhoto" type="file" accept="image/*">
           </div>
-          <div class="a-row"><button class="a-btn primary" type="submit">Add spotlight</button></div>
+          <div class="a-row"><button class="a-btn primary" type="submit" id="spotSubmit">Add spotlight</button><button class="a-btn" type="button" id="spotCancel" hidden>Cancel edit</button></div>
         </form>
         <div id="spotCrop"></div>
         <div class="a-list" id="spotList"></div>
@@ -1947,6 +1947,7 @@
           esc([x.brand, x.price].filter(Boolean).join(' · ')) + (pts ? '<br>' + esc(pts) : '') + '</div></div>' +
           '<label class="a-btn small">' + (x.photo ? 'Change photo' : 'Add photo') + '<input type="file" accept="image/*" data-spotphoto="' + esc(x._k) + '" hidden></label>' +
           (x.photo ? '<button class="a-btn small" type="button" data-spotunphoto="' + esc(x._k) + '">Remove photo</button>' : '') +
+          '<button class="a-btn small" type="button" data-spotedit="' + esc(x._k) + '">Edit</button>' +
           '<button class="a-btn small danger" type="button" data-del="spotlights/' + esc(x._k) + '">Delete</button></div>';
       }).join('') : '<p class="a-empty">No spotlight yet.</p>';
 
@@ -2104,17 +2105,46 @@
         product: product, brand: $('spotBrand').value.trim(), price: $('spotPrice').value.trim(),
         points: $('spotPoints').value.split(/\n/).map(function (l) { return l.trim(); }).filter(Boolean).slice(0, 3).join('\n')
       };
+      var editKey = spotEditKey;
       function saveSpot(photo) {
-        rec.addedAt = Date.now();
         if (photo) rec.photo = photo;
-        return rootRef.child('spotlights').push(rec).then(function () {
-          ['spotProduct', 'spotBrand', 'spotPrice', 'spotPoints', 'spotPhoto'].forEach(function (id) { $(id).value = ''; });
-          toast('Spotlight added.');
+        var done = editKey && (DATA.spotlights || {})[editKey]
+          ? rootRef.child('spotlights/' + editKey).update(rec)
+          : (rec.addedAt = Date.now(), rootRef.child('spotlights').push(rec));
+        return done.then(function () {
+          resetSpotForm();
+          toast(editKey ? 'Spotlight updated.' : 'Spotlight added.');
         });
       }
       var f = $('spotPhoto').files && $('spotPhoto').files[0];
       if (f) openCropper('spot', f, spotCropOpts(product, saveSpot));
       else saveSpot().catch(function (err) { toast(failText(err), true); });
+    });
+    // Editing: Edit fills the form with that spotlight; saving updates it in place
+    // (keeps its photo and its spot in the rotation unless a new photo is picked).
+    var spotEditKey = null;
+    function resetSpotForm() {
+      spotEditKey = null;
+      ['spotProduct', 'spotBrand', 'spotPrice', 'spotPoints', 'spotPhoto'].forEach(function (id) { $(id).value = ''; });
+      $('spotSubmit').textContent = 'Add spotlight';
+      $('spotCancel').hidden = true;
+    }
+    $('spotCancel').addEventListener('click', resetSpotForm);
+    $('spotList').addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-spotedit]');
+      if (!b) return;
+      var k = b.getAttribute('data-spotedit'), x = (DATA.spotlights || {})[k];
+      if (!x) return;
+      spotEditKey = k;
+      $('spotProduct').value = x.product || '';
+      $('spotBrand').value = x.brand || '';
+      $('spotPrice').value = x.price || '';
+      $('spotPoints').value = x.points || '';
+      $('spotPhoto').value = '';
+      $('spotSubmit').textContent = 'Save changes';
+      $('spotCancel').hidden = false;
+      $('spotForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('spotProduct').focus({ preventScroll: true });
     });
     // Product photos: whole product fits by default (zoom out allowed), small block on the board.
     function spotCropOpts(product, save) {
