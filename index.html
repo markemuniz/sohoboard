@@ -1929,7 +1929,7 @@
     function unlock() {
       $('gate').hidden = true;
       $('adminMain').hidden = false;
-      $('preview').src = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'preview';
+      $('preview').src = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'preview&v=' + Date.now();
       counter('quoteText', 'quoteCount', 220);
       counter('shoutText', 'shoutCount', 160);
       counter('msgText', 'msgCount', 200);
