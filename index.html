@@ -394,13 +394,13 @@
           </div>
           <div class="a-field" style="grid-column:1/-1">
             <label for="bdcMsg">Birthday message (short is best)</label>
-            <textarea id="bdcMsg" maxlength="70" placeholder="Have the best day! The whole SoHo team loves you"></textarea>
+            <textarea id="bdcMsg" maxlength="90" placeholder="Have the best day! The whole SoHo team loves you"></textarea>
           </div>
           <div class="a-field" style="grid-column:1/-1">
             <label for="bdcPhoto">Photo</label>
-            <input id="bdcPhoto" type="file" accept="image/*" required>
+            <input id="bdcPhoto" type="file" accept="image/*">
           </div>
-          <div class="a-row"><button class="a-btn primary" type="submit">Next: crop the photo</button></div>
+          <div class="a-row"><button class="a-btn primary" type="submit" id="bdcSubmit">Next: crop the photo</button><button class="a-btn" type="button" id="bdcCancel" hidden>Cancel edit</button></div>
         </form>
         <div id="bdcCrop"></div>
         <div class="a-list" id="bdcList"></div>
@@ -1249,16 +1249,22 @@
     for (y = 1; y < FH - 1; y++) { r[y][0] = '🌿'; r[y][FW - 1] = '🌿'; }
     var BW = FW - 2, BH = FH - 2;
     for (y = 0; y < BH; y++) for (x = 0; x < BW; x++) r[y + 1][x + 1] = '\u0001' + key + '|' + x + '|' + y + '|' + BW + '|' + BH;
-    var tc = FW + 1, tw = COLS - tc - 1;
+    var tc = FW + 1, tw = COLS - tc;
     for (x = tc - 1; x < COLS; x++) {
       var on = (x - tc + 1 + cycle) % 2 === 0;
       r[0][x] = on ? '🌿' : '{G}';
       r[ROWS - 1][x] = on ? '{G}' : '🌿';
     }
-    var L = ['HAPPY', 'BIRTHDAY', ''].concat(fitLines(wrap(p.name, tw), 2, tw));
-    var msg = String(p.msg || '').trim();
-    if (msg) L = L.concat([''], fitLines(wrap(msg, tw), Math.max(1, ROWS - 3 - L.length), tw));
-    L = L.slice(0, ROWS - 2);
+    // Fit everything in the 10 rows between the leaf rows; the spacer lines go first if the message is long.
+    var room = ROWS - 2, nameL = fitLines(wrap(p.name, tw), 2, tw);
+    var msg = String(p.msg || '').trim(), msgL = msg ? wrap(msg, tw) : [];
+    var gap1 = 1, gap2 = msgL.length ? 1 : 0;
+    var used = function () { return 2 + gap1 + nameL.length + gap2 + msgL.length; };
+    if (used() > room) gap1 = 0;
+    if (used() > room) gap2 = 0;
+    if (used() > room) msgL = fitLines(msgL, Math.max(1, room - (2 + nameL.length)), tw);
+    var L = ['HAPPY', 'BIRTHDAY'].concat(gap1 ? [''] : [], nameL, gap2 ? [''] : [], msgL);
+    L = L.slice(0, room);
     var start = 1 + Math.floor((ROWS - 2 - L.length) / 2);
     L.forEach(function (s, n) { var c = txt(s, tw); put(r[start + n], tc + Math.floor((tw - c.length) / 2), c); });
     return r;
@@ -2023,6 +2029,7 @@
         var when = x.date === tdy ? 'Today, showing now' : (String(x.date) < tdy ? x.date + ' (past)' : x.date);
         return '<div class="a-item">' + (x.photo ? '<img class="a-thumb" alt="" src="' + esc(x.photo) + '">' : '') +
           '<div class="grow"><div class="name">' + esc(x.name) + '</div><div class="sub">' + esc(when) + (x.msg ? '<br>' + esc(x.msg) : '') + '</div></div>' +
+          '<button class="a-btn small" type="button" data-bdcedit="' + esc(x._k) + '">Edit</button>' +
           '<button class="a-btn small danger" type="button" data-del="bdayCelebs/' + esc(x._k) + '">Delete</button></div>';
       }).join('') : '<p class="a-empty">No birthday celebrations yet.</p>';
 
@@ -2377,12 +2384,40 @@
       ev.preventDefault();
       var name = $('bdcName').value.trim(), date = $('bdcDate').value, msg = $('bdcMsg').value.trim();
       var f = $('bdcPhoto').files && $('bdcPhoto').files[0];
-      if (!name || !date || !f) { toast('Add a name, date and photo.', true); return; }
-      openCropper('bday', f, { who: name, boxId: 'bdcCrop', grid: [13, 10], save: function (data) {
-        return rootRef.child('bdayCelebs').push({ name: name, date: date, msg: msg, photo: data, addedAt: Date.now() }).then(function () {
-          $('bdcName').value = ''; $('bdcMsg').value = ''; $('bdcPhoto').value = ''; $('bdcDate').value = todayStr();
-        });
-      } });
+      var editKey = bdcEditKey && (DATA.bdayCelebs || {})[bdcEditKey] ? bdcEditKey : null;
+      if (!name || !date || (!f && !editKey)) { toast('Add a name, date and photo.', true); return; }
+      var rec = { name: name, date: date, msg: msg };
+      function saveBdc(photo) {
+        if (photo) rec.photo = photo;
+        var done = editKey ? rootRef.child('bdayCelebs/' + editKey).update(rec)
+          : (rec.addedAt = Date.now(), rootRef.child('bdayCelebs').push(rec));
+        return done.then(function () { resetBdcForm(); toast(editKey ? 'Birthday updated.' : 'Birthday saved.'); });
+      }
+      if (f) openCropper('bday', f, { who: name, boxId: 'bdcCrop', grid: [13, 10], save: saveBdc });
+      else saveBdc().catch(function (err) { toast(failText(err), true); });
+    });
+    // Editing: Edit loads it into the form; saving updates it in place. Pick a photo only to replace it.
+    var bdcEditKey = null;
+    function resetBdcForm() {
+      bdcEditKey = null;
+      $('bdcName').value = ''; $('bdcMsg').value = ''; $('bdcPhoto').value = ''; $('bdcDate').value = todayStr();
+      $('bdcSubmit').textContent = 'Next: crop the photo';
+      $('bdcCancel').hidden = true;
+    }
+    $('bdcCancel').addEventListener('click', resetBdcForm);
+    $('bdcList').addEventListener('click', function (ev) {
+      var b = ev.target.closest && ev.target.closest('[data-bdcedit]');
+      if (!b) return;
+      var k = b.getAttribute('data-bdcedit'), x = (DATA.bdayCelebs || {})[k];
+      if (!x) return;
+      bdcEditKey = k;
+      $('bdcName').value = x.name || ''; $('bdcDate').value = x.date || todayStr(); $('bdcMsg').value = x.msg || ''; $('bdcPhoto').value = '';
+      $('bdcSubmit').textContent = 'Save changes';
+      $('bdcCancel').hidden = false;
+      $('bdcForm').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    $('bdcPhoto').addEventListener('change', function () {
+      if (bdcEditKey) $('bdcSubmit').textContent = this.files && this.files[0] ? 'Next: crop the new photo' : 'Save changes';
     });
 
     $('petForm').addEventListener('submit', function (ev) {
