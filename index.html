@@ -223,7 +223,7 @@
 
       <section class="a-card">
         <h2>Upload Dutchie report</h2>
-        <p class="a-hint">Use the same sales report as the ATV contest. It needs Budtender Name, Order ID, Total Inventory Sold and Net Sales columns. Upload yesterday's report each morning. Re-uploading a day replaces it. To credit attributions, choose the attribution export along with it.</p>
+        <p class="a-hint">Use the same sales report as the ATV contest. It needs Budtender Name, Order ID, Total Inventory Sold and Net Sales columns. Upload yesterday's report each morning. Re-uploading a day replaces it. To credit attributions, also choose the attribution export, either at the same time or right after.</p>
         <div class="a-row">
           <label class="a-btn primary" for="reportFile">Choose report</label>
           <input type="file" id="reportFile" accept=".xlsx,.xls,.csv" multiple hidden>
@@ -233,7 +233,7 @@
       </section>
 
       <section class="a-card">
-        <h2 id="attrTitle">Attributions</h2>
+        <h2 id="attrTitle">Kiosk sales / attributions</h2>
         <p class="a-hint">A budtender gets credit when the customer they logged buys the same day, matched by customer name in the Dutchie report. Credit goes to the person on the attribution, even if someone else rang the sale. Choose the attribution export and the Dutchie report together in Upload Dutchie report above. Uploading the full export again is fine: saved days are replaced and your review choices are kept. Blank names and test entries are skipped, and the same purchase only counts once.</p>
         <div id="attrSummary" style="min-width:0"></div>
         <div id="attrReview" style="min-width:0"></div>
@@ -651,7 +651,7 @@
     ['atvDay', 'ATV leaders, yesterday'],
     ['uptMonth', 'UPT leaders, month to date'],
     ['atvMonth', 'ATV leaders, month to date'],
-    ['attrib', 'Attribution leaders, month to date'],
+    ['attrib', 'Kiosk sales / attributions, month to date'],
     ['stars', 'Star Board'],
     ['quote', 'Google review quotes'],
     ['shout', 'Shout-outs'],
@@ -981,7 +981,7 @@
     var list = attribStats(mk).filter(function (a) { return a.credited > 0 && !isExcluded(a.name, terms); });
     if (!list.length) return null;
     var n = attribDays(mk).length;
-    return leaderPanel(MON[+mk.slice(5, 7) - 1] + ' ATTRIBUTIONS', 'MONTH TO DATE - ' + n + (n === 1 ? ' DAY' : ' DAYS'), list,
+    return leaderPanel('KIOSK SALES/ATTRIBUTIONS', MON[+mk.slice(5, 7) - 1] + ' TO DATE - ' + n + (n === 1 ? ' DAY' : ' DAYS'), list,
       function (a) { var c = String(a.credited), m = money(a.net); while (c.length < 3) c = ' ' + c; while (m.length < 6) m = ' ' + m; return c + '  ' + m; }, 'SALES CREDITED - NET SALES', 1);
   }
 
@@ -2204,7 +2204,7 @@
     });
     function renderAttrib() {
       var mk = attribMonth();
-      $('attrTitle').textContent = 'Attributions' + (mk ? ' · ' + MON[+mk.slice(5, 7) - 1].charAt(0) + MON[+mk.slice(5, 7) - 1].slice(1).toLowerCase() : '');
+      $('attrTitle').textContent = 'Kiosk sales / attributions' + (mk ? ' · ' + MON[+mk.slice(5, 7) - 1].charAt(0) + MON[+mk.slice(5, 7) - 1].slice(1).toLowerCase() : '');
       if (!mk) {
         $('attrSummary').innerHTML = '<p class="a-empty">No attributions yet. Choose the attribution export with the Dutchie report above.</p>';
         $('attrReview').innerHTML = ''; $('attrNone').innerHTML = '';
@@ -2689,7 +2689,7 @@
 
 
     /* ---------- attribution matching ---------- */
-    var pendingAttr = null;
+    var pendingAttr = null, heldAttr = [];
     // A spreadsheet time cell (serial number) or text, as a local Date.
     function cellTime(v) {
       if (v instanceof Date && !isNaN(v)) return v;
@@ -2838,16 +2838,27 @@
           }).catch(function (err) { return { error: err.message }; });
         }));
       }).then(function (results) {
-        pending = [];
-        var errors = [], attrFiles = [];
+        // The two files can be picked together or one after the other: a pick
+        // with only the attribution export keeps the sales report already
+        // chosen, and a pick with only a sales report keeps the export.
+        var errors = [], attrFiles = [], sales = [];
         results.forEach(function (res) {
           if (res && res.error) errors.push(res.error);
           else if (res && res.attrib) attrFiles.push(res.attrib);
-          else pending = pending.concat(res);
+          else sales = sales.concat(res);
         });
-        buildPendingAttr(attrFiles);
+        if (sales.length) pending = sales;
+        if (attrFiles.length) heldAttr = attrFiles;
+        buildPendingAttr(pending.length ? heldAttr : []);
         if (pendingAttr && pendingAttr.error) { errors.push(pendingAttr.error); pendingAttr = null; }
         $('uploadMsg').textContent = errors.join(' ');
+        if (!pending.length && heldAttr.length) {
+          var na = 0; heldAttr.forEach(function (f) { na += f.rows.length; });
+          $('parsed').innerHTML = '<p class="a-hint"><b>Attribution export ready</b> (' + na + ' entries). Now choose the Dutchie sales report for the same days.</p>' +
+            '<div class="a-row"><button class="a-btn" type="button" id="cancelPending">Cancel</button></div>';
+          $('cancelPending').addEventListener('click', function () { heldAttr = []; pending = []; renderPending(); });
+          return;
+        }
         renderPending();
       }).catch(function (err) {
         $('parsed').innerHTML = '';
@@ -2877,7 +2888,7 @@
       }
       html += '<div class="a-row"><button class="a-btn primary" type="button" id="savePending">Save to board</button><button class="a-btn" type="button" id="cancelPending">Cancel</button></div>';
       $('parsed').innerHTML = html;
-      $('cancelPending').addEventListener('click', function () { pending = []; renderPending(); });
+      $('cancelPending').addEventListener('click', function () { pending = []; heldAttr = []; renderPending(); });
       $('savePending').addEventListener('click', savePending);
     }
 
@@ -2905,7 +2916,7 @@
       rootRef.update(writes).then(function () {
         var n = Object.keys(writes).filter(function (k) { return k.indexOf('days/') === 0; }).length;
         var na = pendingAttr ? Object.keys(pendingAttr.days).length : 0;
-        pending = []; renderPending();
+        pending = []; heldAttr = []; renderPending();
         toast('Saved ' + n + (n === 1 ? ' day' : ' days') + ' to the board' + (na ? ', with attributions.' : '.'));
       }).catch(function (err) { btn.disabled = false; toast(failText(err), true); });
     }
