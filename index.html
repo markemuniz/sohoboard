@@ -223,13 +223,21 @@
 
       <section class="a-card">
         <h2>Upload Dutchie report</h2>
-        <p class="a-hint">Use the same sales report as the ATV contest. It needs Budtender Name, Order ID, Total Inventory Sold and Net Sales columns. Upload yesterday's report each morning. Re-uploading a day replaces it.</p>
+        <p class="a-hint">Use the same sales report as the ATV contest. It needs Budtender Name, Order ID, Total Inventory Sold and Net Sales columns. Upload yesterday's report each morning. Re-uploading a day replaces it. To credit attributions, choose the attribution export along with it.</p>
         <div class="a-row">
           <label class="a-btn primary" for="reportFile">Choose report</label>
           <input type="file" id="reportFile" accept=".xlsx,.xls,.csv" multiple hidden>
         </div>
         <p class="a-err" id="uploadMsg"></p>
         <div id="parsed"></div>
+      </section>
+
+      <section class="a-card">
+        <h2 id="attrTitle">Attributions</h2>
+        <p class="a-hint">A budtender gets credit when the customer they logged buys the same day, matched by customer name in the Dutchie report. Credit goes to the person on the attribution, even if someone else rang the sale. Choose the attribution export and the Dutchie report together in Upload Dutchie report above. Uploading the full export again is fine: saved days are replaced and your review choices are kept. Blank names and test entries are skipped, and the same purchase only counts once.</p>
+        <div id="attrSummary" style="min-width:0"></div>
+        <div id="attrReview" style="min-width:0"></div>
+        <div id="attrNone" style="min-width:0"></div>
       </section>
 
       <section class="a-card">
@@ -643,6 +651,7 @@
     ['atvDay', 'ATV leaders, yesterday'],
     ['uptMonth', 'UPT leaders, month to date'],
     ['atvMonth', 'ATV leaders, month to date'],
+    ['attrib', 'Attribution leaders, month to date'],
     ['stars', 'Star Board'],
     ['quote', 'Google review quotes'],
     ['shout', 'Shout-outs'],
@@ -937,6 +946,43 @@
     var title = monthName(ld) + (metric === 'upt' ? ' UPT' : ' ATV');
     return leaderPanel(title, 'MONTH TO DATE - ' + md.length + ' DAYS', list, metric === 'upt' ? fmtUpt : fmtAtv,
       metric === 'upt' ? 'UNITS PER ORDER' : 'AVERAGE TICKET', min);
+  }
+
+  /* ---------- attributions ---------- */
+  // DATA.attrib[day].list[id] = { by, c, t, st, net, sold, ot }
+  // st: auto (matched), ok (approved in review), review, no (rejected), none (no sale), dup
+  function attribCredited(st) { return st === 'auto' || st === 'ok'; }
+  function attribMonth() {
+    var t = todayStr();
+    var keys = Object.keys(DATA.attrib || {}).filter(function (k) { return k <= t; }).sort();
+    return keys.length ? keys[keys.length - 1].slice(0, 7) : null;
+  }
+  function attribDays(mk) {
+    return Object.keys(DATA.attrib || {}).filter(function (k) { return k.slice(0, 7) === mk; }).sort();
+  }
+  function attribStats(mk) {
+    var agg = {};
+    attribDays(mk).forEach(function (d) {
+      vals(((DATA.attrib || {})[d] || {}).list).forEach(function (e) {
+        if (!e || !e.by || e.st === 'dup') return;
+        var k = safeKey(e.by).toLowerCase();
+        var a = agg[k] || (agg[k] = { name: e.by, logged: 0, credited: 0, review: 0, net: 0 });
+        a.logged++;
+        if (attribCredited(e.st)) { a.credited++; a.net += Number(e.net) || 0; }
+        if (e.st === 'review') a.review++;
+      });
+    });
+    return vals(agg).sort(function (a, b) { return b.credited - a.credited || b.net - a.net || a.name.localeCompare(b.name); });
+  }
+  function attribPanel() {
+    var mk = attribMonth();
+    if (!mk) return null;
+    var terms = excludeTerms();
+    var list = attribStats(mk).filter(function (a) { return a.credited > 0 && !isExcluded(a.name, terms); });
+    if (!list.length) return null;
+    var n = attribDays(mk).length;
+    return leaderPanel(MON[+mk.slice(5, 7) - 1] + ' ATTRIBUTIONS', 'MONTH TO DATE - ' + n + (n === 1 ? ' DAY' : ' DAYS'), list,
+      function (a) { var c = String(a.credited), m = money(a.net); while (c.length < 3) c = ' ' + c; while (m.length < 6) m = ' ' + m; return c + '  ' + m; }, 'SALES CREDITED - NET SALES', 1);
   }
 
   function starPanel() {
@@ -1490,7 +1536,7 @@
     return framed(r);
   }
 
-  var ORDER = ['bdayToday', 'welcome', 'weather', 'onthisday', 'home', 'records', 'mis', 'uptDay', 'trivQ', 'stars', 'countdown', 'bdayToday', 'nycfact', 'spotlight', 'atvDay', 'trivA', 'pet', 'quote', 'celebrate', 'celebPhoto', 'bdayToday', 'uptMonth', 'nycfact', 'shout', 'atvMonth', 'bdayToday', 'message'];
+  var ORDER = ['bdayToday', 'welcome', 'weather', 'onthisday', 'home', 'records', 'mis', 'uptDay', 'trivQ', 'stars', 'countdown', 'bdayToday', 'nycfact', 'spotlight', 'atvDay', 'trivA', 'pet', 'quote', 'celebrate', 'celebPhoto', 'attrib', 'bdayToday', 'uptMonth', 'nycfact', 'shout', 'atvMonth', 'bdayToday', 'message'];
   function build(name, cycle) {
     if (!panelOn(name)) return null;
     switch (name) {
@@ -1500,6 +1546,7 @@
       case 'atvDay': return dayLeaders('atv');
       case 'uptMonth': return monthLeaders('upt');
       case 'atvMonth': return monthLeaders('atv');
+      case 'attrib': return attribPanel();
       case 'stars': return starPanel();
       case 'quote': return quotePanel(cycle);
       case 'shout': return shoutPanel(cycle);
@@ -2063,6 +2110,7 @@
       }).join('') : '<p class="a-empty">No questions of your own yet' + (S().builtinTrivia === false ? '.' : '. The built-in ones are running.') + '</p>';
 
       renderMisInfo();
+      renderAttrib();
 
       // Page toggles
       $('panelToggles').innerHTML = PANELS.map(function (pp) {
@@ -2154,6 +2202,56 @@
       rootRef.child('settings/message').set($('msgText').value.trim()).then(function () { toast('Message saved.'); })
         .catch(function (err) { toast(failText(err), true); });
     });
+    function renderAttrib() {
+      var mk = attribMonth();
+      $('attrTitle').textContent = 'Attributions' + (mk ? ' · ' + MON[+mk.slice(5, 7) - 1].charAt(0) + MON[+mk.slice(5, 7) - 1].slice(1).toLowerCase() : '');
+      if (!mk) {
+        $('attrSummary').innerHTML = '<p class="a-empty">No attributions yet. Choose the attribution export with the Dutchie report above.</p>';
+        $('attrReview').innerHTML = ''; $('attrNone').innerHTML = '';
+        return;
+      }
+      var stats = attribStats(mk), terms = excludeTerms();
+      $('attrSummary').innerHTML = '<div class="a-table-wrap"><table class="a-table"><thead><tr><th>Budtender</th><th class="r">Logged</th><th class="r">Credited</th><th class="r">Rate</th><th class="r">Net sales</th></tr></thead><tbody>' +
+        stats.map(function (a) {
+          var hidden = isExcluded(a.name, terms);
+          return '<tr><td>' + esc(a.name) + (hidden ? ' <span style="color:var(--a-muted)">(off the TV)</span>' : '') + '</td><td class="r">' + a.logged + '</td><td class="r">' + a.credited +
+            (a.review ? ' <span style="color:var(--a-muted)">+' + a.review + '?</span>' : '') + '</td><td class="r">' + Math.round(100 * a.credited / Math.max(1, a.logged)) + '%</td><td class="r">' + money(a.net) + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+
+      var rev = [], none = [];
+      attribDays(mk).slice().reverse().forEach(function (d) {
+        var list = ((DATA.attrib || {})[d] || {}).list || {};
+        Object.keys(list).sort().forEach(function (id) {
+          var e = list[id]; if (!e) return;
+          var item = { d: d, id: id, e: e };
+          if (e.st === 'review' || e.st === 'ok' || e.st === 'no') rev.push(item);
+          else if (e.st === 'none') none.push(item);
+        });
+      });
+      var h = '<h3 style="font-size:15px;margin:18px 0 8px">Needs a look</h3>';
+      h += rev.length ? '<div class="a-list">' + rev.map(function (x) {
+        var e = x.e, key = esc(x.d + '|' + x.id);
+        var btns = e.st === 'review'
+          ? '<button class="a-btn small primary" type="button" data-attr="' + key + '|ok">Count it</button><button class="a-btn small" type="button" data-attr="' + key + '|no">Don\'t count</button>'
+          : '<span class="sub" style="color:var(--a-muted)">' + (e.st === 'ok' ? 'Counted' : 'Not counted') + '</span><button class="a-btn small" type="button" data-attr="' + key + '|review">Undo</button>';
+        return '<div class="a-item" style="flex-wrap:wrap"><div class="grow"><div class="name">' + esc(e.c) + ' · ' + esc(e.by) + '</div><div class="sub">Logged ' + esc(shortDate(x.d)) + ' ' + esc(e.t) +
+          '. Possible sale: ' + esc(e.oc || '') + ' at ' + esc(e.ot || '') + ', rung by ' + esc(e.sold || '?') + ', ' + money(e.net || 0) + '.</div></div>' + btns + '</div>';
+      }).join('') + '</div>' : '<p class="a-empty">Nothing to review.</p>';
+      $('attrReview').innerHTML = h;
+      $('attrNone').innerHTML = none.length ? '<details style="margin-top:14px"><summary class="a-hint" style="cursor:pointer">No sale found (' + none.length + ')</summary><div class="a-list" style="margin-top:8px">' +
+        none.map(function (x) {
+          return '<div class="a-item"><div class="grow"><div class="name">' + esc(x.e.c) + ' · ' + esc(x.e.by) + '</div><div class="sub">Logged ' + esc(shortDate(x.d)) + ' ' + esc(x.e.t) + '</div></div></div>';
+        }).join('') + '</div></details>' : '';
+    }
+    document.addEventListener('click', function (ev) {
+      var b = ev.target.closest ? ev.target.closest('button[data-attr]') : null;
+      if (!b || !rootRef) return;
+      var p = b.dataset.attr.split('|');
+      rootRef.child('attrib/' + p[0] + '/list/' + p[1] + '/st').set(p[2]).then(function () {
+        toast(p[2] === 'ok' ? 'Counted.' : p[2] === 'no' ? 'Not counted.' : 'Back in review.');
+      }).catch(function (err) { toast(failText(err), true); });
+    });
+
     function renderMisInfo() {
       var el = $('misInfo');
       if (!MIS.loaded && !MIS.error) { el.textContent = 'Checking the misdispense log…'; return; }
@@ -2505,6 +2603,7 @@
       var wb = XLSX.read(buf, { type: 'array' });
       var ws = wb.Sheets[wb.SheetNames[0]];
       var rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+      var rawRows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
       var hi = -1;
       for (var i = 0; i < Math.min(rows.length, 60); i++) {
         var low = (rows[i] || []).map(function (c) { return String(c).trim().toLowerCase(); });
@@ -2518,6 +2617,8 @@
         bud: col(['budtender name', 'budtender', 'employee']),
         units: col(['total inventory sold', 'inventory sold', 'quantity sold', 'quantitysold', 'qty']),
         net: col(['net sales', 'netsales']),
+        cust: col(['customer name', 'customer']),
+        time: col(['order time', 'transaction time', 'order date', 'transaction date', 'completed date', 'completed on']),
         date: -1
       };
       // Pick the column that dates each sale. Prefer an order or transaction date,
@@ -2547,11 +2648,21 @@
         var oid = String(row[C.order] || '').trim();
         if (!oid) continue;
         var day = (C.date >= 0 ? toYmd(row[C.date]) : null) || reportDay || '?';
-        var D = byDay[day] || (byDay[day] = { net: 0, orderIds: {}, orders: {} });
+        var D = byDay[day] || (byDay[day] = { net: 0, orderIds: {}, orders: {}, cust: {} });
         var net = parseNum(row[C.net]), units = parseNum(row[C.units]);
         D.net += net;
         D.orderIds[oid] = 1;
         var name = String(row[C.bud] || '').replace(/[\s\u0000-\u001F\u007F]+/g, ' ').trim();
+        // Customer and time of each order, used only in this browser to match
+        // attributions. Never saved to the database.
+        if (C.cust >= 0 && C.time >= 0) {
+          var co = D.cust[oid];
+          if (!co) {
+            var when = cellTime((rawRows[r] || [])[C.time]);
+            if (when) co = D.cust[oid] = { id: oid, t: when, cust: String(row[C.cust] || '').trim(), bud: name, net: 0 };
+          }
+          if (co) co.net += net;
+        }
         if (!name || units <= 0 || net <= 0) continue;
         var o = D.orders[oid] || (D.orders[oid] = { name: name, units: 0, net: 0 });
         o.units += units; o.net += net;
@@ -2572,8 +2683,147 @@
           b[key].txn++; b[key].units += o.units; b[key].net += o.net;
         });
         Object.keys(b).forEach(function (key) { b[key].units = round2(b[key].units); b[key].net = round2(b[key].net); });
-        return { date: dk === '?' ? null : dk, file: file.name, netSales: round2(D.net), orders: Object.keys(D.orderIds).length, budtenders: b };
+        return { date: dk === '?' ? null : dk, file: file.name, netSales: round2(D.net), orders: Object.keys(D.orderIds).length, budtenders: b, cust: vals(D.cust) };
       });
+    }
+
+
+    /* ---------- attribution matching ---------- */
+    var pendingAttr = null;
+    // A spreadsheet time cell (serial number) or text, as a local Date.
+    function cellTime(v) {
+      if (v instanceof Date && !isNaN(v)) return v;
+      if (typeof v === 'number' && v > 20000) {
+        var u = new Date(Math.round((v - 25569) * 86400000));
+        return new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds());
+      }
+      return wallTime(v);
+    }
+    // "2026-10-12T14:27:14.871Z" or "10/12/2026 2:27 PM". The attribution export
+    // marks its times as UTC but they are really store time, so the Z is ignored.
+    function wallTime(v) {
+      var s = String(v == null ? '' : v).trim();
+      var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})[ ,]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([ap]m)?/i);
+      if (m) {
+        var y = +m[3]; if (y < 100) y += 2000;
+        var h = +m[4], ap = (m[7] || '').toLowerCase();
+        if (ap === 'pm' && h < 12) h += 12;
+        if (ap === 'am' && h === 12) h = 0;
+        return new Date(y, +m[1] - 1, +m[2], h, +m[5], +(m[6] || 0));
+      }
+      return null;
+    }
+    function hm(d) {
+      var h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return h + ':' + pad2(d.getMinutes()) + ' ' + ap;
+    }
+    function nameToks(s) {
+      return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z\s]/g, '').trim().split(/\s+/).filter(Boolean);
+    }
+    function shortCust(first, last) {
+      var f = String(first || '').trim(), l = String(last || '').trim();
+      return (f + (l ? ' ' + l.charAt(0).toUpperCase() + '.' : '')).trim();
+    }
+    // How well a Dutchie customer name fits the attribution's first and last name.
+    // 4 = both match, 3 = one is only an initial or prefix, 0 = not the same person.
+    function nameScore(first, last, cust) {
+      var w = nameToks(cust);
+      var F = nameToks(first).join(''), L = nameToks(last).join('');
+      if (!w.length || !F) return 0;
+      var cf = w[0], cl = w.slice(1).join(''), cLast = w.length > 1 ? w[w.length - 1] : '';
+      var sc;
+      if (cf === F) sc = 2;
+      else if (cf.indexOf(F) === 0 || F.indexOf(cf) === 0) sc = 1;
+      else return 0;
+      if (!L || !cl) return sc;
+      if (cl === L || cLast === L) return sc + 2;
+      if (L.charAt(0) === cl.charAt(0) && (L.length === 1 || cl.length === 1)) return sc + 1;
+      return 0;
+    }
+    function isTestPhone(p) {
+      var d = String(p || '').replace(/\D/g, '');
+      if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
+      return !d || /^(\d)\1+$/.test(d) || /^1(000)+0*$/.test(d) || ['1234567890', '1234567899', '0123456789', '9876543210'].indexOf(d) >= 0;
+    }
+    function looksLikeAttrib(buf) {
+      try {
+        var head = new TextDecoder().decode(new Uint8Array(buf).slice(0, 400)).toLowerCase();
+        return head.indexOf('helped_by') >= 0 || head.indexOf('helped by') >= 0;
+      } catch (e) { return false; }
+    }
+    function parseAttrib(file, buf) {
+      var wb = XLSX.read(buf, { type: 'array', raw: true });
+      var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+      var H = (rows[0] || []).map(function (c) { return String(c).trim().toLowerCase().replace(/\s+/g, '_'); });
+      function col(n) { return H.indexOf(n); }
+      var C = { time: col('order_time'), by: col('helped_by'), first: col('customer_first'), last: col('customer_last'), phone: col('customer_phone') };
+      if (C.time < 0 || C.by < 0 || C.first < 0) throw new Error(file.name + ": couldn't find the order_time, helped_by and customer_first columns.");
+      var out = [], skipped = 0;
+      for (var r = 1; r < rows.length; r++) {
+        var row = rows[r]; if (!row) continue;
+        var raw = String(row[C.time] || '').trim();
+        var t = wallTime(raw);
+        if (!t) continue;
+        var by = String(row[C.by] || '').replace(/\s+/g, ' ').trim().replace(/\.$/, '');
+        if (!by || /^(blank|none|n\/a|na|-)$/i.test(by) || (C.phone >= 0 && isTestPhone(row[C.phone]))) { skipped++; continue; }
+        out.push({ id: 'a' + raw.replace(/\D/g, '').slice(0, 17), t: t, day: ymd(t), by: by,
+          first: String(row[C.first] || '').trim(), last: C.last >= 0 ? String(row[C.last] || '').trim() : '' });
+      }
+      return { file: file.name, rows: out, skipped: skipped };
+    }
+    // Match each attribution to a completed order: same customer, rung up from
+    // 30 minutes before the attribution until 4 AM the next morning.
+    function matchAttrib(attrs, orders, coveredDays) {
+      attrs = attrs.slice().sort(function (a, b) { return a.t - b.t; });
+      var used = {}, out = {}, outside = {};
+      attrs.forEach(function (a) {
+        if (!coveredDays[a.day]) { outside[a.day] = 1; return; }
+        var from = a.t.getTime() - 30 * 60000;
+        var end = new Date(a.t.getFullYear(), a.t.getMonth(), a.t.getDate() + 1, 4, 0, 0).getTime();
+        var best = null, sawUsed = false;
+        orders.forEach(function (o) {
+          var ot = o.t.getTime();
+          if (ot < from || ot > end) return;
+          var sc = nameScore(a.first, a.last, o.cust);
+          if (!sc) return;
+          if (used[o.id]) { sawUsed = true; return; }
+          var gap = Math.abs(ot - a.t.getTime());
+          if (!best || sc > best.sc || (sc === best.sc && gap < best.gap)) best = { o: o, sc: sc, gap: gap };
+        });
+        var e = { by: a.by, c: shortCust(a.first, a.last), t: hm(a.t), st: 'none', net: 0 };
+        if (best) {
+          var mins = (best.o.t.getTime() - a.t.getTime()) / 60000;
+          e.st = best.sc >= 4 && mins <= 180 ? 'auto' : 'review';
+          e.net = round2(best.o.net);
+          e.sold = String(best.o.bud || '').replace(/_x0009_/gi, ' ');
+          e.ot = hm(best.o.t) + (ymd(best.o.t) !== a.day ? ' next day' : '');
+          e.oc = shortCust.apply(null, (function (w) { return [w[0], w.slice(1).join(' ')]; })(String(best.o.cust || '').trim().split(/\s+/)));
+          if (e.st === 'auto') used[best.o.id] = 1;
+        } else if (sawUsed) e.st = 'dup';
+        (out[a.day] || (out[a.day] = {}))[a.id] = e;
+      });
+      return { days: out, outside: Object.keys(outside).sort() };
+    }
+    function buildPendingAttr(attrFiles) {
+      if (!attrFiles.length) { pendingAttr = null; return; }
+      var orders = [], covered = {};
+      pending.forEach(function (p) { if (p.date) { covered[p.date] = 1; orders = orders.concat(p.cust || []); } });
+      var all = [], skipped = 0;
+      attrFiles.forEach(function (f) { all = all.concat(f.rows); skipped += f.skipped; });
+      if (!pending.length) { pendingAttr = { error: 'Choose the Dutchie sales report for the same days along with the attribution export.' }; return; }
+      if (!orders.length) { pendingAttr = { error: "The Dutchie report doesn't have Customer Name and Order Time columns, so attributions can't be matched." }; return; }
+      var m = matchAttrib(all, orders, covered);
+      m.skipped = skipped;
+      pendingAttr = m;
+    }
+    function attrCounts(daysObj) {
+      var c = { auto: 0, review: 0, none: 0, dup: 0 };
+      Object.keys(daysObj).forEach(function (d) { vals(daysObj[d]).forEach(function (e) { c[e.st] = (c[e.st] || 0) + 1; }); });
+      return c;
     }
 
     $('reportFile').addEventListener('change', function (ev) {
@@ -2584,15 +2834,20 @@
       $('parsed').innerHTML = '<p class="a-hint">Reading…</p>';
       loadXLSX().then(function () {
         return Promise.all(files.map(function (f) {
-          return readFile(f).then(function (buf) { return parseReport(f, buf); }).catch(function (err) { return { error: err.message }; });
+          return readFile(f).then(function (buf) {
+            return looksLikeAttrib(buf) ? { attrib: parseAttrib(f, buf) } : parseReport(f, buf);
+          }).catch(function (err) { return { error: err.message }; });
         }));
       }).then(function (results) {
         pending = [];
-        var errors = [];
+        var errors = [], attrFiles = [];
         results.forEach(function (res) {
           if (res && res.error) errors.push(res.error);
+          else if (res && res.attrib) attrFiles.push(res.attrib);
           else pending = pending.concat(res);
         });
+        buildPendingAttr(attrFiles);
+        if (pendingAttr && pendingAttr.error) { errors.push(pendingAttr.error); pendingAttr = null; }
         $('uploadMsg').textContent = errors.join(' ');
         renderPending();
       }).catch(function (err) {
@@ -2602,7 +2857,7 @@
     });
 
     function renderPending() {
-      if (!pending.length) { $('parsed').innerHTML = ''; return; }
+      if (!pending.length) { pendingAttr = null; $('parsed').innerHTML = ''; return; }
       var y = addDays(todayStr(), -1);
       var html = '<div class="a-table-wrap"><table class="a-table"><thead><tr><th>Day</th><th class="r">Net sales</th><th class="r">Orders</th><th class="r">Budtenders</th><th>File</th></tr></thead><tbody>';
       pending.forEach(function (p, i) {
@@ -2614,6 +2869,13 @@
       });
       html += '</tbody></table></div>';
       if (pending.some(function (p) { return !p.date; })) html += '<p class="a-hint">This report doesn\'t say which day it covers. Pick the day above before saving.</p>';
+      if (pendingAttr) {
+        var ad = Object.keys(pendingAttr.days).sort(), ac = attrCounts(pendingAttr.days);
+        html += '<p class="a-hint"><b>Attributions</b>' + (ad.length ? ' for ' + esc(shortMD(ad[0])) + (ad.length > 1 ? ' to ' + esc(shortMD(ad[ad.length - 1])) : '') + ': ' +
+          ac.auto + ' credited, ' + ac.review + ' to review, ' + ac.none + ' with no sale' + (ac.dup ? ', ' + ac.dup + ' duplicate' : '') + '.' : ': none on the days in this report.') +
+          (pendingAttr.skipped ? ' Skipped ' + pendingAttr.skipped + ' blank or test entries.' : '') +
+          (pendingAttr.outside.length ? ' Not matched yet (no sales report for ' + pendingAttr.outside.map(shortMD).join(', ') + ').' : '') + '</p>';
+      }
       html += '<div class="a-row"><button class="a-btn primary" type="button" id="savePending">Save to board</button><button class="a-btn" type="button" id="cancelPending">Cancel</button></div>';
       $('parsed').innerHTML = html;
       $('cancelPending').addEventListener('click', function () { pending = []; renderPending(); });
@@ -2630,11 +2892,22 @@
         if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('uploadMsg').textContent = 'Pick a day for every report first.'; return; }
         writes['days/' + date] = { netSales: p.netSales, orders: p.orders, budtenders: p.budtenders, file: p.file, uploadedAt: Date.now() };
       }
+      if (pendingAttr) {
+        Object.keys(pendingAttr.days).forEach(function (d) {
+          var prev = (((DATA.attrib || {})[d] || {}).list) || {}, list = pendingAttr.days[d];
+          Object.keys(list).forEach(function (id) {
+            var ps = (prev[id] || {}).st;
+            if ((ps === 'ok' || ps === 'no') && list[id].st !== 'dup') list[id].st = ps;
+          });
+          writes['attrib/' + d] = { list: list, uploadedAt: Date.now() };
+        });
+      }
       btn.disabled = true;
       rootRef.update(writes).then(function () {
-        var n = Object.keys(writes).length;
+        var n = Object.keys(writes).filter(function (k) { return k.indexOf('days/') === 0; }).length;
+        var na = pendingAttr ? Object.keys(pendingAttr.days).length : 0;
         pending = []; renderPending();
-        toast('Saved ' + n + (n === 1 ? ' day' : ' days') + ' to the board.');
+        toast('Saved ' + n + (n === 1 ? ' day' : ' days') + ' to the board' + (na ? ', with attributions.' : '.'));
       }).catch(function (err) { btn.disabled = false; toast(failText(err), true); });
     }
   }
