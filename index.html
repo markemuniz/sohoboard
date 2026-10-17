@@ -2796,8 +2796,7 @@
         });
         var e = { by: a.by, c: shortCust(a.first, a.last), t: hm(a.t), st: 'none', net: 0 };
         if (best) {
-          var mins = (best.o.t.getTime() - a.t.getTime()) / 60000;
-          e.st = best.sc >= 4 && mins <= 180 ? 'auto' : 'review';
+          e.st = best.sc >= 4 ? 'auto' : 'review';
           e.net = round2(best.o.net);
           e.sold = String(best.o.bud || '').replace(/_x0009_/gi, ' ');
           e.ot = hm(best.o.t) + (ymd(best.o.t) !== a.day ? ' next day' : '');
