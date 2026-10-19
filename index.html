@@ -972,7 +972,7 @@
         if (e.st === 'review') a.review++;
       });
     });
-    return vals(agg).sort(function (a, b) { return b.credited - a.credited || b.net - a.net || a.name.localeCompare(b.name); });
+    return vals(agg).sort(function (a, b) { return b.net - a.net || b.credited - a.credited || a.name.localeCompare(b.name); });
   }
   function attribPanel() {
     var mk = attribMonth();
