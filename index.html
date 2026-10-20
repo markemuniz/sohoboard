@@ -914,6 +914,13 @@
     return framed(r);
   }
 
+  /* Board shows first name + last initial: "Shannon Williams" -> "Shannon W" */
+  function shortName(n) {
+    var w = String(n || '').replace(/\s+/g, ' ').trim().split(' ');
+    if (w.length < 2) return w[0] || '';
+    var last = w[w.length - 1].replace(/[^A-Za-z0-9\u00C0-\u024F]/g, '');
+    return w[0] + (last ? ' ' + last.charAt(0).toUpperCase() : '');
+  }
   function leaderPanel(title, sub, list, fmt, foot, minTxn) {
     var r = [center(title), center(sub), blank()];
     if (!list.length) {
@@ -925,7 +932,7 @@
         put(row, 1, txt(String(i + 1)));
         var v = txt(fmt(a));
         put(row, COLS - 1 - v.length, v);
-        put(row, 3, txt(a.name, COLS - 1 - v.length - 1 - 3));
+        put(row, 3, txt(shortName(a.name), COLS - 1 - v.length - 1 - 3));
         r.push(row);
       });
     }
@@ -1008,7 +1015,7 @@
         var row = blank();
         var c = Number(x.count) || 0;
         var n = txt(String(c));
-        put(row, 1, txt(x.name, 10));
+        put(row, 1, txt(shortName(x.name), 10));
         put(row, 12, chips('Y', Math.min(c, 12)));
         put(row, COLS - 1 - n.length, n);
         r.push(row);
