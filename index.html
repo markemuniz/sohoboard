@@ -2760,7 +2760,7 @@
       var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
       var H = (rows[0] || []).map(function (c) { return String(c).trim().toLowerCase().replace(/\s+/g, '_'); });
       function col(n) { return H.indexOf(n); }
-      var C = { time: col('order_time'), by: col('helped_by'), first: col('customer_first'), last: col('customer_last'), phone: col('customer_phone') };
+      var C = { time: col('order_time'), by: col('helped_by'), first: col('customer_first'), last: col('customer_last'), phone: col('customer_phone'), oid: col('dutchie_order_id') };
       if (C.time < 0 || C.by < 0 || C.first < 0) throw new Error(file.name + ": couldn't find the order_time, helped_by and customer_first columns.");
       var out = [], skipped = 0;
       for (var r = 1; r < rows.length; r++) {
@@ -2770,30 +2770,70 @@
         if (!t) continue;
         var by = String(row[C.by] || '').replace(/\s+/g, ' ').trim().replace(/\.$/, '');
         if (!by || /^(blank|none|n\/a|na|-)$/i.test(by) || (C.phone >= 0 && isTestPhone(row[C.phone]))) { skipped++; continue; }
+        // The order ID field is usually junk text; keep it only when it's a real number.
+        var oid = C.oid >= 0 ? String(row[C.oid] || '').trim() : '';
         out.push({ id: 'a' + raw.replace(/\D/g, '').slice(0, 17), t: t, day: ymd(t), by: by,
-          first: String(row[C.first] || '').trim(), last: C.last >= 0 ? String(row[C.last] || '').trim() : '' });
+          first: String(row[C.first] || '').trim(), last: C.last >= 0 ? String(row[C.last] || '').trim() : '',
+          oid: /^\d{5,}$/.test(oid) ? oid : '' });
       }
       return { file: file.name, rows: out, skipped: skipped };
     }
     // Match each attribution to a completed order: same customer, rung up from
-    // 30 minutes before the attribution until 4 AM the next morning.
+    // 30 minutes before the attribution to 4 hours after it. A later visit by the
+    // same customer is a new sale, not this one.
+    // When two entries could claim the same sale (the customer was logged twice),
+    // the sale goes to the entry whose Dutchie order ID matches, otherwise to the
+    // entry logged closest to checkout. The other entry is marked as a duplicate.
+    var ATTR_BEFORE_MIN = 30, ATTR_AFTER_MIN = 240;
     function matchAttrib(attrs, orders, coveredDays) {
       attrs = attrs.slice().sort(function (a, b) { return a.t - b.t; });
-      var used = {}, out = {}, outside = {};
-      attrs.forEach(function (a) {
-        if (!coveredDays[a.day]) { outside[a.day] = 1; return; }
-        var from = a.t.getTime() - 30 * 60000;
-        var end = new Date(a.t.getFullYear(), a.t.getMonth(), a.t.getDate() + 1, 4, 0, 0).getTime();
-        var best = null, sawUsed = false;
+      var used = {}, out = {}, outside = {}, res = [], byId = {};
+      orders.forEach(function (o) { byId[String(o.id)] = o; });
+      var live = attrs.filter(function (a) {
+        if (!coveredDays[a.day]) { outside[a.day] = 1; return false; }
+        return true;
+      });
+      // Every order each entry could be: name fits and the time is in the window.
+      live.forEach(function (a, i) {
+        var at = a.t.getTime(), from = at - ATTR_BEFORE_MIN * 60000, end = at + ATTR_AFTER_MIN * 60000;
+        var cands = [];
         orders.forEach(function (o) {
           var ot = o.t.getTime();
           if (ot < from || ot > end) return;
           var sc = nameScore(a.first, a.last, o.cust);
-          if (!sc) return;
-          if (used[o.id]) { sawUsed = true; return; }
-          var gap = Math.abs(ot - a.t.getTime());
-          if (!best || sc > best.sc || (sc === best.sc && gap < best.gap)) best = { o: o, sc: sc, gap: gap };
+          if (sc) cands.push({ o: o, sc: sc, gap: Math.abs(ot - at) });
         });
+        res[i] = { a: a, cands: cands, best: null };
+      });
+      // 1. An order ID in the export that matches a sale for the same customer settles it.
+      res.forEach(function (r) {
+        var o = r.a.oid && byId[r.a.oid];
+        if (!o || used[o.id] || !nameScore(r.a.first, r.a.last, o.cust)) return;
+        r.best = { o: o, sc: 4 }; used[o.id] = 1;
+      });
+      // 2. Full-name matches, closest in time first, so a sale goes to the entry
+      //    logged nearest to checkout.
+      var pairs = [];
+      res.forEach(function (r, i) { if (!r.best) r.cands.forEach(function (c) { if (c.sc >= 4) pairs.push({ i: i, c: c }); }); });
+      pairs.sort(function (x, y) { return x.c.gap - y.c.gap; });
+      pairs.forEach(function (p) {
+        var r = res[p.i];
+        if (r.best || used[p.c.o.id]) return;
+        r.best = p.c; used[p.c.o.id] = 1;
+      });
+      // 3. Anything left: a partial-name match goes to review (it doesn't claim the
+      //    sale), a customer whose only sale was already credited is a duplicate.
+      res.forEach(function (r) {
+        if (r.best) return;
+        var best = null, sawUsed = false;
+        r.cands.forEach(function (c) {
+          if (used[c.o.id]) { sawUsed = true; return; }
+          if (!best || c.sc > best.sc || (c.sc === best.sc && c.gap < best.gap)) best = c;
+        });
+        r.best = best; r.dup = !best && sawUsed;
+      });
+      res.forEach(function (r) {
+        var a = r.a, best = r.best;
         var e = { by: a.by, c: shortCust(a.first, a.last), t: hm(a.t), st: 'none', net: 0 };
         if (best) {
           e.st = best.sc >= 4 ? 'auto' : 'review';
@@ -2801,8 +2841,7 @@
           e.sold = String(best.o.bud || '').replace(/_x0009_/gi, ' ');
           e.ot = hm(best.o.t) + (ymd(best.o.t) !== a.day ? ' next day' : '');
           e.oc = shortCust.apply(null, (function (w) { return [w[0], w.slice(1).join(' ')]; })(String(best.o.cust || '').trim().split(/\s+/)));
-          if (e.st === 'auto') used[best.o.id] = 1;
-        } else if (sawUsed) e.st = 'dup';
+        } else if (r.dup) e.st = 'dup';
         (out[a.day] || (out[a.day] = {}))[a.id] = e;
       });
       return { days: out, outside: Object.keys(outside).sort() };
