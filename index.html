@@ -235,7 +235,7 @@
 
       <section class="a-card">
         <h2 id="attrTitle">Kiosk sales / attributions</h2>
-        <p class="a-hint">A budtender gets credit when the customer they logged buys the same day, matched by customer name in the Dutchie report. Credit goes to the person on the attribution, even if someone else rang the sale. Choose the attribution export and the Dutchie report together in Upload Dutchie report above. Uploading the full export again is fine: saved days are replaced and your review choices are kept. Blank names and test entries are skipped, and the same purchase only counts once.</p>
+        <p class="a-hint">A budtender gets credit when the customer they logged buys the same day, matched by customer name in the Dutchie report. Credit goes to the person on the attribution, even if someone else rang the sale. Choose the attribution export and the Dutchie report together in Upload Dutchie report above. Uploading the full export again is fine: saved days are replaced and your review choices are kept. Entries with no budtender picked are skipped, and the same purchase only counts once.</p>
         <div id="attrSummary" style="min-width:0"></div>
         <div id="attrReview" style="min-width:0"></div>
         <div id="attrNone" style="min-width:0"></div>
@@ -2968,11 +2968,6 @@
       if (L.charAt(0) === cl.charAt(0) && (L.length === 1 || cl.length === 1)) return sc + 1;
       return 0;
     }
-    function isTestPhone(p) {
-      var d = String(p || '').replace(/\D/g, '');
-      if (d.length === 11 && d.charAt(0) === '1') d = d.slice(1);
-      return !d || /^(\d)\1+$/.test(d) || /^1(000)+0*$/.test(d) || ['1234567890', '1234567899', '0123456789', '9876543210'].indexOf(d) >= 0;
-    }
     function looksLikeAttrib(buf) {
       try {
         var head = new TextDecoder().decode(new Uint8Array(buf).slice(0, 400)).toLowerCase();
@@ -2993,7 +2988,10 @@
         var t = wallTime(raw);
         if (!t) continue;
         var by = String(row[C.by] || '').replace(/\s+/g, ' ').trim().replace(/\.$/, '');
-        if (!by || /^(blank|none|n\/a|na|-)$/i.test(by) || (C.phone >= 0 && isTestPhone(row[C.phone]))) { skipped++; continue; }
+        // Placeholder phones (1234567890 and the like) still count: walk-ins who
+        // won't give their info are rung under a house profile like "Mark M",
+        // and the sale is matched by name and time like any other.
+        if (!by || /^(blank|none|n\/a|na|-)$/i.test(by)) { skipped++; continue; }
         // The order ID field is usually junk text; keep it only when it's a real number.
         var oid = C.oid >= 0 ? String(row[C.oid] || '').trim() : '';
         out.push({ id: 'a' + raw.replace(/\D/g, '').slice(0, 17), t: t, day: ymd(t), by: by,
@@ -3146,7 +3144,7 @@
         var ad = Object.keys(pendingAttr.days).sort(), ac = attrCounts(pendingAttr.days);
         html += '<p class="a-hint"><b>Attributions</b>' + (ad.length ? ' for ' + esc(shortMD(ad[0])) + (ad.length > 1 ? ' to ' + esc(shortMD(ad[ad.length - 1])) : '') + ': ' +
           ac.auto + ' credited, ' + ac.review + ' to review, ' + ac.none + ' with no sale' + (ac.dup ? ', ' + ac.dup + ' duplicate' : '') + '.' : ': none on the days in this report.') +
-          (pendingAttr.skipped ? ' Skipped ' + pendingAttr.skipped + ' blank or test entries.' : '') +
+          (pendingAttr.skipped ? ' Skipped ' + pendingAttr.skipped + ' with no budtender picked.' : '') +
           (pendingAttr.outside.length ? ' Not matched yet (no sales report for ' + pendingAttr.outside.map(shortMD).join(', ') + ').' : '') + '</p>';
       }
       html += '<div class="a-row"><button class="a-btn primary" type="button" id="savePending">Save to board</button><button class="a-btn" type="button" id="cancelPending">Cancel</button></div>';
