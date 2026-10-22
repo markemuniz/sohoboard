@@ -3270,5 +3270,81 @@
   }
 })();
 </script>
+<style>
+  .a-drop { outline: 2px dashed var(--a-accent); outline-offset: 4px; border-radius: 10px; background-color: rgba(127,127,127,0.08); }
+</style>
+<script>
+/* Drag and drop: drop a file onto any photo or report spot in the admin to fill it,
+   same as choosing it with the button. */
+(function () {
+  var current = null;
+
+  function isFileDrag(e) {
+    var t = e.dataTransfer && e.dataTransfer.types;
+    return !!t && Array.prototype.indexOf.call(t, 'Files') !== -1;
+  }
+
+  // Walk up from where the pointer is to the nearest area that holds exactly one file input.
+  function findZone(node) {
+    var el = node && node.nodeType === 1 ? node : node && node.parentElement;
+    if (!el || !el.closest('.a-card')) return null;
+    for (; el; el = el.parentElement) {
+      var ins = el.matches('input[type=file]') ? [el] : el.querySelectorAll('input[type=file]');
+      if (ins.length === 1) return { zone: el, input: ins[0] };
+      if (ins.length > 1) return null;
+      if (el.classList.contains('a-card')) return null;
+    }
+    return null;
+  }
+
+  function accepts(input, f) {
+    var acc = (input.getAttribute('accept') || '').toLowerCase().split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    if (!acc.length) return true;
+    var name = (f.name || '').toLowerCase(), type = (f.type || '').toLowerCase();
+    return acc.some(function (a) {
+      if (a.charAt(0) === '.') return name.slice(-a.length) === a;
+      if (a.slice(-2) === '/*') return type.indexOf(a.slice(0, -1)) === 0;
+      return type === a;
+    });
+  }
+
+  function setCurrent(z) {
+    if (current && (!z || current !== z.zone)) current.classList.remove('a-drop');
+    current = z ? z.zone : null;
+    if (current) current.classList.add('a-drop');
+  }
+
+  document.addEventListener('dragover', function (e) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault(); // keeps the browser from opening the file in the tab
+    var z = findZone(e.target);
+    if (z && z.input.disabled) z = null;
+    setCurrent(z);
+    e.dataTransfer.dropEffect = z ? 'copy' : 'none';
+  });
+
+  document.addEventListener('dragleave', function (e) {
+    if (!e.relatedTarget) setCurrent(null);
+  });
+
+  document.addEventListener('drop', function (e) {
+    if (!isFileDrag(e)) return;
+    e.preventDefault();
+    var z = findZone(e.target);
+    setCurrent(null);
+    if (!z || z.input.disabled) return;
+    var files = Array.prototype.filter.call(e.dataTransfer.files || [], function (f) { return accepts(z.input, f); });
+    if (!files.length) {
+      alert(z.input.accept.indexOf('image') !== -1 ? 'That file isn\'t a photo.' : 'That file type doesn\'t go here.');
+      return;
+    }
+    if (!z.input.multiple) files = files.slice(0, 1);
+    var dt = new DataTransfer();
+    files.forEach(function (f) { dt.items.add(f); });
+    z.input.files = dt.files;
+    z.input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+})();
+</script>
 </body>
 </html>
