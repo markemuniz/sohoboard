@@ -763,7 +763,9 @@
   }
 
   /* ================= board text helpers ================= */
-  var ALLOWED = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$()-+&=;:'\"%,./?°";
+  var ALLOWED = " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$()-+&=;:'\"%,./?°" +
+    // Letters that don't break apart into a plain letter + accent (Srđa, Øre, Łukasz)
+    "ĐØŁÆŒÞĦŊ";
   // Emoji support: text is split into whole characters (graphemes) so an emoji,
   // even one built from several code points like a flag or a skin tone, lands
   // on a single tile. Anything else outside ALLOWED still becomes a blank tile.
@@ -1742,7 +1744,7 @@
       } else {
         // The herb emoji shows as a real cannabis leaf picture instead.
         var leaf = cell === '🌿';
-        el.className = (flash ? 't f' : 't') + (leaf ? ' leaf' : (/[^\x00-\x7F]/.test(cell) ? ' e' : ''));
+        el.className = (flash ? 't f' : 't') + (leaf ? ' leaf' : (/[^\x00-\x7F\u00C0-\u024F]/.test(cell) ? ' e' : ''));
         el.firstChild.nodeValue = (cell === ' ' || leaf) ? '' : cell;
       }
     }
