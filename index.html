@@ -459,7 +459,7 @@
         <h2>Trivia</h2>
         <label class="a-row" for="builtinTrivia" style="font-size:15px">
           <input type="checkbox" id="builtinTrivia" style="width:20px;height:20px">
-          Include the 20 built-in cannabis trivia questions
+          Include the 38 built-in cannabis trivia questions
         </label>
         <form id="triviaForm" class="a-grid2">
           <div class="a-field" style="grid-column:1/-1">
@@ -647,8 +647,6 @@
     { q: 'What does CBD stand for?', a: 'Cannabidiol' },
     { q: 'Raw flower is mostly THCA. What turns THCA into THC?', a: "Heat. It's called decarboxylation." },
     { q: 'Which tiny resin glands on the flower make most of the cannabinoids and terpenes?', a: 'Trichomes' },
-    { q: 'How many grams are in an eighth?', a: '3.5 grams' },
-    { q: 'How many grams are in an ounce?', a: 'About 28 (28.35 to be exact)' },
     { q: 'What makes live resin different from a regular extract?', a: "It's made from fresh-frozen plants instead of dried and cured ones" },
     { q: 'Rosin is made with only two things. What are they?', a: 'Heat and pressure. No solvents.' },
     { q: "What's the golden rule for a first-time edible customer?", a: 'Start low and go slow' },
@@ -656,7 +654,28 @@
     { q: 'What do you call the big cluster of buds at the top of the plant?', a: 'The cola' },
     { q: 'Under federal law, hemp can have no more than what percent delta-9 THC by dry weight?', a: '0.3 percent' },
     { q: 'Why do edibles take longer to kick in than smoking?', a: "They're digested and processed by the liver first, so it can take 30 minutes to 2 hours" },
-    { q: "What does 'full spectrum' mean on a label?", a: "It keeps a broad range of the plant's cannabinoids and terpenes, not one isolated compound" }
+    { q: "What does 'full spectrum' mean on a label?", a: "It keeps a broad range of the plant's cannabinoids and terpenes, not one isolated compound" },
+    // Harder ones
+    { q: 'Which Israeli scientist first identified the structure of THC in 1964?', a: 'Raphael Mechoulam' },
+    { q: "The body's first discovered endocannabinoid is named after the Sanskrit word for bliss. What is it?", a: 'Anandamide' },
+    { q: 'THC gets you high mainly by binding to which receptor in the brain?', a: 'CB1' },
+    { q: 'CB2 receptors are found mostly in which body system?', a: 'The immune system' },
+    { q: 'Which cannabinoid is called the mother of all cannabinoids because the others are made from it?', a: 'CBG (in its acid form, CBGA)' },
+    { q: 'As THC ages and breaks down from air and light, which cannabinoid does it turn into?', a: 'CBN' },
+    { q: 'Cannabis belongs to which plant family, the same one as hops?', a: 'Cannabaceae' },
+    { q: 'Autoflowering plants flower by age, not light. Which cannabis species gave them that trait?', a: 'Cannabis ruderalis' },
+    { q: 'What daily light schedule triggers most cannabis plants to start flowering?', a: '12 hours of light, 12 hours of dark' },
+    { q: 'What are the hair-like strands on a bud that turn from white to orange?', a: 'Pistils' },
+    { q: "Seedless flower from unpollinated female plants has a Spanish name. What is it?", a: "Sinsemilla. It means 'without seed'." },
+    { q: 'Kush strains are named after a mountain range. Which one?', a: 'The Hindu Kush, in Afghanistan and Pakistan' },
+    { q: 'Solventless hash made by washing trichomes off the plant with ice water is called what?', a: 'Bubble hash (ice water hash)' },
+    { q: "What's the name for cannabinoids and terpenes working better together than alone?", a: 'The entourage effect' },
+    { q: 'Which 1937 federal law effectively made cannabis illegal across the US?', a: 'The Marihuana Tax Act' },
+    { q: 'Which state became the first to legalize medical cannabis, in 1996?', a: 'California (Prop 215)' },
+    { q: 'Which two states were the first to legalize adult-use cannabis, in 2012?', a: 'Colorado and Washington' },
+    { q: 'New York legalized adult-use cannabis in 2021 with which law? Name it or its initials.', a: 'The MRTA (Marihuana Regulation and Taxation Act)' },
+    { q: 'Which New York state agency regulates the cannabis industry?', a: 'The Office of Cannabis Management (OCM)' },
+    { q: 'The term 420 traces back to a group of 1971 students from which California high school?', a: "San Rafael High School. They called themselves the Waldos." }
   ];
   function triviaList() {
     var custom = vals(DATA.trivia).filter(function (x) { return x && x.q && x.a; })
